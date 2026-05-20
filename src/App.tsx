@@ -67,9 +67,6 @@ export default function App() {
     'gemini-3.5-flash': true,
     'gemini-3.1-flash-lite': false,
     'gemini-3-flash-preview': false,
-    'gemini-2.0-flash': false,
-    'gemini-1.5-flash': false,
-    'gemini-1.5-flash-8b': false,
   });
 
   const [selectedGroqModels, setSelectedGroqModels] = useState<Record<string, boolean>>({
@@ -163,6 +160,7 @@ export default function App() {
   const [modelCooldowns, setModelCooldowns] = useState<Record<string, number>>({});
   const [activeGeminiKeyIndex, setActiveGeminiKeyIndex] = useState<number>(0);
   const [activeGroqKeyIndex, setActiveGroqKeyIndex] = useState<number>(0);
+  const [isUsingClientFallback, setIsUsingClientFallback] = useState<boolean>(false);
 
   // Uploader ref & drag over helper
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -252,9 +250,6 @@ export default function App() {
     const arr = provider === 'gemini' ? geminiKeys : provider === 'groq' ? groqKeys : mistralKeys;
     return arr.map(k => k.trim()).filter(k => k.length > 5);
   };
-
-  // Global state to track if we've switched to client-side direct API calling
-  const [isUsingClientFallback, setIsUsingClientFallback] = useState<boolean>(false);
 
   // Helper to make API calls to Gemini/Groq with an automatic Client-Side Direct Fallback
   // if the server proxy is not running (returns 404, or network failure, or isn't a node environment)
@@ -905,12 +900,27 @@ export default function App() {
 
   const copyToClipboard = (text: string, refId: string) => {
     if (!text) return;
-    const el = document.createElement('textarea');
-    el.value = text;
-    document.body.appendChild(el);
-    el.select();
-    document.execCommand('copy');
-    document.body.removeChild(el);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).catch(() => {
+        const el = document.createElement('textarea');
+        el.value = text;
+        el.style.position = 'fixed';
+        el.style.opacity = '0';
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand('copy');
+        document.body.removeChild(el);
+      });
+    } else {
+      const el = document.createElement('textarea');
+      el.value = text;
+      el.style.position = 'fixed';
+      el.style.opacity = '0';
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+    }
 
     setCopiedStatus(prev => ({ ...prev, [refId]: true }));
     setTimeout(() => {
@@ -1397,10 +1407,6 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
         }
 
         let cleanJson = resultText.trim();
-        const mdMatchRetry = cleanJson.match(/```(?:json)?\s*([\s\S]*?)```/);
-        if (mdMatchRetry) {
-          cleanJson = mdMatchRetry[1].trim();
-        }
         const bStart = cleanJson.indexOf('{');
         const bEnd = cleanJson.lastIndexOf('}');
         if (bStart !== -1 && bEnd > bStart) {
@@ -1427,7 +1433,7 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
     setProgressPercent(0);
     setProgressStatus("Menyiapkan pemrosesan batch...");
 
-    const concurrencyLimit = noLimitMode ? 10 : speed3x ? 3 : 1;
+    const concurrencyLimit = speed3x ? 3 : 1;
     let finished = 0;
     const total = listPending.length;
 

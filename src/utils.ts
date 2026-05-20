@@ -95,14 +95,11 @@ export async function generateMetadata(imageDescription: string): Promise<string
 export function resizeAndCompressImage(
   base64Str: string,
   maxWidth = 1024,
-  maxHeight = 1024,
-  mimeType = 'image/jpeg'
+  maxHeight = 1024
 ): Promise<string> {
   return new Promise((resolve) => {
     const img = new Image();
-    // Use provided mimeType or detect from base64 prefix; fallback to jpeg
-    const srcMime = mimeType || 'image/jpeg';
-    img.src = `data:${srcMime};base64,${base64Str}`;
+    img.src = `data:image/png;base64,${base64Str}`;
     img.onload = () => {
       let width = img.width;
       let height = img.height;
