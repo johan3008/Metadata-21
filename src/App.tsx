@@ -742,10 +742,10 @@ export default function App() {
       .filter(p => targetPlatforms[p as keyof TargetPlatforms])
       .join(', ');
       
-    const minT = Math.floor(item.settings.titleLength * 0.9);
-    const maxT = item.settings.titleLength;
-    const minD = Math.floor(item.settings.descLength * 0.9);
-    const maxD = item.settings.descLength;
+    const minT = Math.floor(item.settings.titleLength * 0.8);
+    const maxT = Math.ceil(item.settings.titleLength * 1.2);
+    const minD = Math.floor(item.settings.descLength * 0.8);
+    const maxD = Math.ceil(item.settings.descLength * 1.2);
     const kwTarget = item.settings.keywordsCount;
 
     let specificGuides = "";
@@ -785,31 +785,15 @@ TARGET AGENSI: ${platformsStr || 'Shutterstock, Adobe Stock, Freepik, Canva'}
 MISI:
 Buatlah judul komersial yang komprehensif, deskripsi kreatif yang memikat, klasifikasi kategori per platform, serta tag kata kunci ramah mesin pencari yang sepenuhnya "GROUNDED" (berpijak nyata) pada aset ini.
 
-ATURAN METADATA 100% SUKSES (WAJIB DIPATUHI SECARA EKSAK):
-1. JUDUL SEO: 
-   - Formula 3-Layer: [Elemen fisik nyata] + [Aksi / Alur cerita] + [Makna komersial / Niche]
-   - Panjang WAJIB: ${minT}-${maxT} karakter (tidak boleh kurang, tidak boleh lebih)
-   - Pastikan judul tidak terpotong dan lengkap
-   
-2. DESKRIPSI: 
-   - Ceritakan alur visual gambar secara natural dan menarik bagi pembeli
-   - Panjang WAJIB: ${minD}-${maxD} karakter (tidak boleh kurang, tidak boleh lebih)
-   - Deskripsi harus utuh, tidak boleh terpotong di tengah kalimat
-   
-3. KATA KUNCI (KEYWORDS): 
-   - Hasilkan TEPAT ${kwTarget} kata kunci unik (bukan sekitar, tapi HARUS ${kwTarget})
-   - Format: single word atau two-word max, no spasi panjang
-   - Urutan strategis:
-     * Posisi 1-10: Subjek & visual dominan nyata yang terlihat di frame
-     * Posisi 11-25: Aksi, gerak tubuh, emosi, warna, pencahayaan
-     * Posisi 26-${kwTarget}: Hubungan konsep bisnis, kegunaan komersial, trend microstock
+ATURAN METADATA 100% SUKSES:
+1. JUDUL SEO: Wajib mengandung formula 3-Layer: [Elemen fisik nyata] + [Aksi / Alur cerita] + [Makna komersial / Niche]. Panjang harus ${minT}-${maxT} karakter.
+2. DESKRIPSI: Ceritakan alur visual gambar secara natural dan menarik bagi pembeli antara ${minD}-${maxD} karakter.
+3. KATA KUNCI (KEYWORDS): Hasilkan TEPAT ${kwTarget} kata kunci unik. No spasi (single keywords).
+   - Urutan 1-10: Subjek & visual dominan nyata yang terlihat di frame.
+   - Urutan 11-25: Aksi, gerak tubuh, emosi, warna, pencahayaan.
+   - Urutan 26-${kwTarget}: Hubungan konsep bisnis, kegunaan komersial, trend microstock.
    ${item.settings.keyConcepts ? `- ⭐ PRIORITAS UTAMA: Kata kunci "${item.settings.keyConcepts}" wajib ditempatkan di posisi 1-5!` : ''}
-   
-4. LEGAL & TRADEMARK SAFETY: 
-   - Hindari nama brand terlarang (Nike, Apple, iPhone, BMW, Sony, dsb)
-   - Ganti dengan nama generik (modern smartphone, athletic shoes, luxury car, dsb)
-   - Dilarang keras menulis brand kamera!
-   
+4. LEGAL & TRADEMARK SAFETY: Hindari nama brand terlarang (Nike, Apple, iPhone, BMW, Sony, dsb). Ganti dengan nama generik (modern smartphone, athletic shoes, luxury car, dsb). Dilarang keras menulis brand kamera!
 5. KATEGORI PLATFORM RESMI (WAJIB PILIH DARI DAFTAR DI BAWAH): 
    - Shutterstock: Berikan "shutterstock1" dan "shutterstock2" berisi 2 kategori resmi berbeda yang dipilih HANYA dari daftar ini: [${SHUTTERSTOCK_CATEGORIES.slice(0, 30).join(', ')}]
    - Adobe Stock: Berikan "adobeStock" berisi kategori tunggal yang wajib dipilih HANYA dari daftar ini: [${ADOBE_STOCK_CATEGORIES.slice(0, 25).join(', ')}]
@@ -819,13 +803,11 @@ ATURAN METADATA 100% SUKSES (WAJIB DIPATUHI SECARA EKSAK):
 
 ${specificGuides}
 
-PENTING: Output harus presisi sesuai target character count dan keyword count. Jangan menghasilkan output yang nanggung atau terpotong!
-
 OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
 {
-  "title": "Judul 3-Layer Bahasa Inggris padat SEO, panjang EXACT ${item.settings.titleLength} karakter (range ${minT}-${maxT})",
-  "description": "Deskripsi kreatif Bahasa Inggris berbobot komersial, panjang EXACT ${item.settings.descLength} karakter (range ${minD}-${maxD})",
-  "keywords": [array kata kunci tunggal berjumlah TEPAT ${kwTarget} elemen unik, tidak kurang tidak lebih],
+  "title": "Judul 3-Layer Bahasa Inggris padat SEO, panjang sekitar ${item.settings.titleLength} karakter",
+  "description": "Deskripsi kreatif Bahasa Inggris berbobot komersial, panjang sekitar ${item.settings.descLength} karakter",
+  "keywords": [sekumpulan kata kunci tunggal dipisah koma sejumlah tepat ${kwTarget} elemen unik],
   "categories": {
     "shutterstock1": "Kategori ke-1",
     "shutterstock2": "Kategori ke-2 berbeda",
@@ -839,10 +821,10 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
 
   // POST PROCESSING: Validate and Repair output payload structures
   const repairParsedOutput = (parsed: any, settings: any, fileName: string): Metadata => {
-    // 1. Repair Title - ensure exact character count compliance
+    // 1. Repair Title
     let repairedTitle = (parsed?.title || '').toString().trim();
-    const minT = Math.floor(settings.titleLength * 0.9);
-    const maxT = settings.titleLength;
+    const minT = Math.floor(settings.titleLength * 0.8);
+    const maxT = Math.ceil(settings.titleLength * 1.2);
 
     if (repairedTitle.length < minT) {
       const suffixes = [" for commercial lifestyle use", " designed with creative concepts", " perfect for advertising design", " ideal for social media contents", " in high quality modern style"];
@@ -853,10 +835,10 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
       repairedTitle = repairedTitle.substring(0, maxT).trim();
     }
 
-    // 2. Repair Description - ensure exact character count compliance
+    // 2. Repair Description
     let repairedDesc = (parsed?.description || '').toString().trim();
-    const minD = Math.floor(settings.descLength * 0.9);
-    const maxD = settings.descLength;
+    const minD = Math.floor(settings.descLength * 0.8);
+    const maxD = Math.ceil(settings.descLength * 1.2);
 
     if (repairedDesc.length < minD) {
       repairedDesc += " Highly recommended for graphic designers, digital marketers, and agencies looking for premium microstock assets.";
@@ -865,7 +847,7 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
       repairedDesc = repairedDesc.substring(0, maxD).trim();
     }
 
-    // 3. Repair Keywords - ensure EXACT keyword count (no less, no more)
+    // 3. Repair Keywords
     let kws: string[] = [];
     if (Array.isArray(parsed?.keywords)) {
       kws = parsed.keywords;
@@ -891,35 +873,19 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
     uniqueKws = uniqueKws.filter(k => !forbidden.some(word => k.toLowerCase().includes(word)));
 
     const expectedCount = settings.keywordsCount;
-    
-    // If keywords are less than target, add backup keywords aggressively
     if (uniqueKws.length < expectedCount) {
-      const backupKws = ["background", "design", "element", "concept", "abstract", "commercial", "asset", "contemporary", "creative", "clean", "minimalist", "modern", "lifestyle", "composition", "presentation", "business", "technology", "innovation", "digital", "future", "corporate", "marketing", "success", "strategy", "analytics", "authentic", "vintage", "eco-friendly", "sustainability", "productivity"];
+      const backupKws = ["background", "design", "element", "concept", "abstract", "commercial", "asset", "contemporary", "creative", "clean", "minimalist", "modern", "lifestyle", "composition", "presentation"];
       for (const b of backupKws) {
         if (uniqueKws.length >= expectedCount) break;
         if (!uniqueKws.includes(b)) {
           uniqueKws.push(b);
         }
       }
-      
-      // If still not enough, duplicate some keywords with variations
-      if (uniqueKws.length < expectedCount) {
-        const additionalBackups = ["idea", "solution", "professional", "quality", "service", "industry", "brand", "growth", "development", "planning", "management", "teamwork", "collaboration", "network", "connection", "data", "information", "knowledge", "learning", "education"];
-        for (const b of additionalBackups) {
-          if (uniqueKws.length >= expectedCount) break;
-          if (!uniqueKws.includes(b)) {
-            uniqueKws.push(b);
-          }
-        }
-      }
-    }
-    
-    // If keywords exceed target, trim precisely to exact count
-    if (uniqueKws.length > expectedCount) {
+    } else if (uniqueKws.length > expectedCount) {
       uniqueKws = uniqueKws.slice(0, expectedCount);
     }
 
-    // Ensure key concepts are prioritized at the front
+    // Ensure key concepts
     if (settings.keyConcepts) {
       const concepts = settings.keyConcepts.toLowerCase().split(',').map(c => c.trim()).filter(Boolean);
       concepts.forEach(concept => {
@@ -932,7 +898,6 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
           uniqueKws.unshift(concept);
         }
       });
-      // Re-trim to exact count after adding concepts
       uniqueKws = uniqueKws.slice(0, expectedCount);
     }
 
