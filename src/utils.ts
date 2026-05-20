@@ -74,6 +74,23 @@ export function measureSEOQuality(item: QueueItem): { score: number; issues: str
   };
 }
 
+// Generate metadata using Groq API
+export async function generateMetadata(imageDescription: string): Promise<string> {
+  const response = await fetch("/api/generate-metadata", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ imageDescription }),
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error?.message || "Gagal menghasilkan metadata");
+  }
+  return data.content;
+}
+
 // Image compression
 export function resizeAndCompressImage(
   base64Str: string,

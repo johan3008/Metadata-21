@@ -28,6 +28,8 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
+import ThemeSwitcher from './components/ThemeSwitcher';
+
 // Import Types and Constants
 import { AssetType, QueueItem, AuthProvider, TargetPlatforms, Metadata } from './types';
 import { 
@@ -67,11 +69,8 @@ export default function App() {
   });
 
   const [selectedGroqModels, setSelectedGroqModels] = useState<Record<string, boolean>>({
-    'mixtral-8x7b-32768': true,
     'llama-3.3-70b-versatile': true,
-    'llama-3.2-90b-vision-preview': false,
-    'llama-3.1-8b-instant': false,
-    'meta-llama/llama-4-maverick-17b-128e-instruct': false,
+    'llama-3.1-8b-instant': true,
     'meta-llama/llama-4-scout-17b-16e-instruct': false,
   });
 
@@ -1224,10 +1223,11 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
   const avgSEO = calculateAverageScore();
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col font-sans">
+      <ThemeSwitcher />
       
       {/* Premium Elegant Sticky Navbar */}
-      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200/80 shadow-sm">
+      <header className="sticky top-0 z-40 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           <div className="flex items-center space-x-3.5">
             <div className="bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-600 p-2.5 rounded-2xl text-white shadow-md shadow-purple-500/20 hover:scale-105 transition-transform duration-200">
