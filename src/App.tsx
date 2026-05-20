@@ -61,12 +61,9 @@ export default function App() {
   
   // Selected Models for each engine
   const [selectedGeminiModels, setSelectedGeminiModels] = useState<Record<string, boolean>>({
-    'gemini-2.0-flash': true,
-    'gemini-1.5-flash': true,
-    'gemini-1.5-pro': false,
-    'gemini-2.0-flash-lite': false,
     'gemini-3.5-flash': true,
-    'gemini-3.5-pro': false,
+    'gemini-3.1-flash-lite': false,
+    'gemini-3-flash-preview': false,
   });
 
   const [selectedGroqModels, setSelectedGroqModels] = useState<Record<string, boolean>>({
@@ -289,7 +286,7 @@ export default function App() {
     setTestGeminiStatus('testing');
     setTestGeminiMsg(`⏳ Menguji ${keysToTest.length} Kunci di berbagai model...`);
 
-    const modelsToTest = Object.keys(selectedGeminiModels);
+    const modelsToTest = Object.keys(selectedGeminiModels).filter(m => selectedGeminiModels[m]);
 
     // Initialize clean diagnostics state for tested slots
     const initialDiagnostics: Record<number, Record<string, { status: 'pending' | 'testing' | 'success' | 'rate_limit' | 'not_supported' | 'error'; message: string }>> = {};
@@ -452,7 +449,7 @@ export default function App() {
     setTestGroqStatus('testing');
     setTestGroqMsg(`⏳ Menguji ${keysToTest.length} Kunci Groq di berbagai model...`);
 
-    const modelsToTest = Object.keys(selectedGroqModels);
+    const modelsToTest = Object.keys(selectedGroqModels).filter(m => selectedGroqModels[m]);
 
     // Initialize diagnostics
     const initialDiagnostics: Record<number, Record<string, { status: 'pending' | 'testing' | 'success' | 'rate_limit' | 'not_supported' | 'error'; message: string }>> = {};
