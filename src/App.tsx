@@ -60,18 +60,28 @@ export default function App() {
   // API key states (5 slots each for token rotation)
   const [geminiKeys, setGeminiKeys] = useState<string[]>(['', '', '', '', '']);
   const [groqKeys, setGroqKeys] = useState<string[]>(['', '', '', '', '']);
+  const [mistralKeys, setMistralKeys] = useState<string[]>(['', '', '', '', '']);
   
   // Selected Models for each engine
   const [selectedGeminiModels, setSelectedGeminiModels] = useState<Record<string, boolean>>({
     'gemini-3.5-flash': true,
     'gemini-3.1-flash-lite': false,
     'gemini-3-flash-preview': false,
+    'gemini-2.0-flash': false,
+    'gemini-1.5-flash': false,
+    'gemini-1.5-flash-8b': false,
   });
 
   const [selectedGroqModels, setSelectedGroqModels] = useState<Record<string, boolean>>({
     'llama-3.3-70b-versatile': true,
     'llama-3.1-8b-instant': true,
     'meta-llama/llama-4-scout-17b-16e-instruct': false,
+  });
+
+  const [selectedMistralModels, setSelectedMistralModels] = useState<Record<string, boolean>>({
+    'pixtral-large-latest': true,
+    'mistral-small-latest': true,
+    'mistral-medium-latest': true,
   });
 
   // Toggles & Customization State
@@ -98,22 +108,56 @@ export default function App() {
   // Queue Vault & Accordeons Visibility
   const [isGeminiVaultOpen, setIsGeminiVaultOpen] = useState<boolean>(false);
   const [isGroqVaultOpen, setIsGroqVaultOpen] = useState<boolean>(false);
+  const [isMistralVaultOpen, setIsMistralVaultOpen] = useState<boolean>(false);
 
   // Connection diagnostics states
   const [testGeminiMsg, setTestGeminiMsg] = useState<string>('Belum diuji');
   const [testGeminiStatus, setTestGeminiStatus] = useState<'idle' | 'testing' | 'success' | 'err'>('idle');
   const [testGroqMsg, setTestGroqMsg] = useState<string>('Belum diuji');
   const [testGroqStatus, setTestGroqStatus] = useState<'idle' | 'testing' | 'success' | 'err'>('idle');
+  const [testMistralMsg, setTestMistralMsg] = useState<string>('Belum diuji');
+  const [testMistralStatus, setTestMistralStatus] = useState<'idle' | 'testing' | 'success' | 'err'>('idle');
 
   // Multi-model detailed diagnostics
   const [geminiDiagnostics, setGeminiDiagnostics] = useState<Record<number, Record<string, { status: 'pending' | 'testing' | 'success' | 'rate_limit' | 'not_supported' | 'error'; message: string }>>>({});
   const [groqDiagnostics, setGroqDiagnostics] = useState<Record<number, Record<string, { status: 'pending' | 'testing' | 'success' | 'rate_limit' | 'not_supported' | 'error'; message: string }>>>({});
+  const [mistralDiagnostics, setMistralDiagnostics] = useState<Record<number, Record<string, { status: 'pending' | 'testing' | 'success' | 'rate_limit' | 'not_supported' | 'error'; message: string }>>>({});
 
   // Loading & Progress metrics
   const [isProcessingAll, setIsProcessingAll] = useState<boolean>(false);
   const [progressPercent, setProgressPercent] = useState<number>(0);
   const [progressStatus, setProgressStatus] = useState<string>('');
   const [globalError, setGlobalError] = useState<string | null>(null);
+
+  // Bulk selection state
+  const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
+
+  const toggleItemSelected = (id: string) => {
+    setSelectedItemIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedItemIds.size === items.length) {
+      setSelectedItemIds(new Set());
+    } else {
+      setSelectedItemIds(new Set(items.map(i => i.id)));
+    }
+  };
+
+  const handleBulkUpdateKeyConcepts = (newConcepts: string) => {
+    setItems(prev => prev.map(item => {
+      if (selectedItemIds.has(item.id)) {
+        return { ...item, settings: { ...item.settings, keyConcepts: newConcepts } };
+      }
+      return item;
+    }));
+    setSelectedItemIds(new Set()); // Clear selection after update
+  };
 
   // Rate Limit cooldown trackers
   const [modelCooldowns, setModelCooldowns] = useState<Record<string, number>>({});
@@ -144,12 +188,23 @@ export default function App() {
     }
     setGroqKeys(loadedGroq);
 
+    const loadedMistral = [...mistralKeys];
+    for (let i = 1; i <= 5; i++) {
+        const key = localStorage.getItem(`shophub_mistral_key_${i}`);
+        if (key) {
+           loadedMistral[i - 1] = key;
+        }
+    }
+    setMistralKeys(loadedMistral);
+    
     // Auto open API Vaults if keys exist
     const hasGemini = loadedGemini.some(k => k.trim().length > 5);
     const hasGroq = loadedGroq.some(k => k.trim().length > 5);
+    const hasMistral = loadedMistral.some(k => k.trim().length > 5);
 
     if (hasGemini) setIsGeminiVaultOpen(true);
     if (hasGroq) setIsGroqVaultOpen(true);
+    if (hasMistral) setIsMistralVaultOpen(true);
 
     if (hasGroq && !hasGemini) {
       setActiveAuthProvider('groq');
@@ -171,6 +226,13 @@ export default function App() {
     localStorage.setItem(`shophub_groq_key_${index + 1}`, val.trim());
   };
 
+  const handleMistralKeyChange = (index: number, val: string) => {
+    const updated = [...mistralKeys];
+    updated[index] = val.trim();
+    setMistralKeys(updated);
+    localStorage.setItem(`shophub_mistral_key_${index + 1}`, val.trim());
+  };
+
   // Toggle checklist platform
   const togglePlatform = (key: keyof TargetPlatforms) => {
     setTargetPlatforms(prev => ({ ...prev, [key]: !prev[key] }));
@@ -186,8 +248,8 @@ export default function App() {
   };
 
   // Extract non-blank keys
-  const getActiveKeys = (provider: 'gemini' | 'groq'): string[] => {
-    const arr = provider === 'gemini' ? geminiKeys : groqKeys;
+  const getActiveKeys = (provider: 'gemini' | 'groq' | 'mistral'): string[] => {
+    const arr = provider === 'gemini' ? geminiKeys : provider === 'groq' ? groqKeys : mistralKeys;
     return arr.map(k => k.trim()).filter(k => k.length > 5);
   };
 
@@ -197,14 +259,14 @@ export default function App() {
   // Helper to make API calls to Gemini/Groq with an automatic Client-Side Direct Fallback
   // if the server proxy is not running (returns 404, or network failure, or isn't a node environment)
   const performProxyOrFallbackCall = async (
-    provider: 'gemini' | 'groq',
+    provider: 'gemini' | 'groq' | 'mistral',
     options: {
       model: string;
       key: string;
       payload: any;
     }
   ): Promise<Response> => {
-    const proxyEndpoint = provider === 'gemini' ? '/api/proxy/gemini' : '/api/proxy/groq';
+    const proxyEndpoint = provider === 'gemini' ? '/api/proxy/gemini' : provider === 'groq' ? '/api/proxy/groq' : '/api/proxy/mistral';
     let response: Response | null = null;
     let proxyFailedWith404 = false;
 
@@ -242,12 +304,14 @@ export default function App() {
 
       const directUrl = provider === 'gemini'
         ? `https://generativelanguage.googleapis.com/v1beta/models/${options.model}:generateContent?key=${options.key}`
+        : provider === 'mistral'
+        ? `https://api.mistral.ai/v1/chat/completions`
         : `https://api.groq.com/openai/v1/chat/completions`;
 
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };
-      if (provider === 'groq') {
+      if (provider === 'groq' || provider === 'mistral') {
         headers['Authorization'] = `Bearer ${options.key}`;
       }
 
@@ -569,6 +633,124 @@ export default function App() {
     }
   };
 
+  // Connection testing - Mistral
+  const testMistralConn = async () => {
+    const keysToTest: { key: string; index: number }[] = [];
+    mistralKeys.forEach((k, idx) => {
+      if (k.trim().length > 5) {
+        keysToTest.push({ key: k.trim(), index: idx });
+      }
+    });
+
+    if (keysToTest.length === 0) {
+      setTestMistralStatus('err');
+      setTestMistralMsg('❌ Kode Kosong. Mohon masukkan minimal satu API Key Mistral aktif di atas!');
+      return;
+    }
+
+    setTestMistralStatus('testing');
+    setTestMistralMsg(`⏳ Menguji ${keysToTest.length} Kunci Mistral di berbagai model...`);
+
+    const modelsToTest = Object.keys(selectedMistralModels).filter(m => selectedMistralModels[m]);
+
+    // Initialize diagnostics
+    const initialDiagnostics: Record<number, Record<string, { status: 'pending' | 'testing' | 'success' | 'rate_limit' | 'not_supported' | 'error'; message: string }>> = {};
+    keysToTest.forEach(({ index }) => {
+      initialDiagnostics[index] = {};
+      modelsToTest.forEach(model => {
+        initialDiagnostics[index][model] = { status: 'pending', message: 'Antre...' };
+      });
+    });
+    setMistralDiagnostics(initialDiagnostics);
+
+    let anySuccess = false;
+    let anyRateLimit = false;
+
+    for (const { key, index } of keysToTest) {
+      for (const model of modelsToTest) {
+        setMistralDiagnostics(prev => ({
+          ...prev,
+          [index]: {
+            ...prev[index],
+            [model]: { status: 'testing', message: 'Memeriksa...' }
+          }
+        }));
+
+        try {
+          const response = await performProxyOrFallbackCall('mistral', {
+            model: model,
+            key: key,
+            payload: {
+              model: model,
+              messages: [{ role: 'user', content: 'Hi' }],
+              max_tokens: 50
+            }
+          });
+
+          const resData = await response.json().catch(() => ({}));
+
+          if (response.ok) {
+            anySuccess = true;
+            setMistralDiagnostics(prev => ({
+              ...prev,
+              [index]: {
+                ...prev[index],
+                [model]: { status: 'success', message: '✅ Aktif' }
+              }
+            }));
+          } else if (response.status === 429) {
+            anyRateLimit = true;
+            setMistralDiagnostics(prev => ({
+              ...prev,
+              [index]: {
+                ...prev[index],
+                [model]: { status: 'rate_limit', message: '⚠️ Limit (429)' }
+              }
+            }));
+          } else if (response.status === 401 || response.status === 403) {
+            setMistralDiagnostics(prev => ({
+              ...prev,
+              [index]: {
+                ...prev[index],
+                [model]: { status: 'error', message: '❌ Kunci Salah' }
+              }
+            }));
+          } else {
+            const errorMsg = resData?.error?.message || `HTTP ${response.status}`;
+            setMistralDiagnostics(prev => ({
+              ...prev,
+              [index]: {
+                ...prev[index],
+                [model]: { status: 'error', message: `❌ ${errorMsg}` }
+              }
+            }));
+          }
+        } catch (e: any) {
+          setMistralDiagnostics(prev => ({
+            ...prev,
+            [index]: {
+              ...prev[index],
+              [model]: { status: 'error', message: '❌ Jaringan' }
+            }
+          }));
+        }
+
+        await new Promise(r => setTimeout(r, 150));
+      }
+    }
+
+    if (anySuccess) {
+      setTestMistralStatus('success');
+      setTestMistralMsg('✅ Selesai menguji! Model Mistral terdaftar aktif dan siap digunakan.');
+    } else if (anyRateLimit) {
+      setTestMistralStatus('err');
+      setTestMistralMsg('⚠️ Kunci Mistral valid tetapi kuota habis (429 Rate Limit). Mohon tunggu semenit.');
+    } else {
+      setTestMistralStatus('err');
+      setTestMistralMsg('❌ Koneksi Mistral gagal. Sila cek rincian di bawah.');
+    }
+  };
+
   // Handle Drag Events for file area uploader
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -785,16 +967,17 @@ TARGET AGENSI: ${platformsStr || 'Shutterstock, Adobe Stock, Freepik, Canva'}
 MISI:
 Buatlah judul komersial yang komprehensif, deskripsi kreatif yang memikat, klasifikasi kategori per platform, serta tag kata kunci ramah mesin pencari yang sepenuhnya "GROUNDED" (berpijak nyata) pada aset ini.
 
-ATURAN METADATA 100% SUKSES:
-1. JUDUL SEO: Wajib mengandung formula 3-Layer: [Elemen fisik nyata] + [Aksi / Alur cerita] + [Makna komersial / Niche]. Panjang harus ${minT}-${maxT} karakter.
-2. DESKRIPSI: Ceritakan alur visual gambar secara natural dan menarik bagi pembeli antara ${minD}-${maxD} karakter.
-3. KATA KUNCI (KEYWORDS): Hasilkan TEPAT ${kwTarget} kata kunci unik. No spasi (single keywords).
+ATURAN METADATA 100% SUKSES & HINDARI KONTEN GAWUR:
+1. JUDUL SEO: WAJIB menggunakan 3-Layer Formula yang sangat berorientasi SEO agar aset mudah ditemukan di halaman utama pencarian microstock: [1. Elemen fisik nyata (apa yang ada di aset)] + [2. Aksi/Alur cerita (analisis dari 3 frame Start-Middle-End)] + [3. Makna konsep/Niche (mengapa aset ini dibuat)]. Panjang harus ${minT}-${maxT} karakter. DILARANG menggunakan kata-kata sampah (garbage), kata sifat berlebihan, atau pengulangan judul.
+2. DESKRIPSI: Wajib menarasikan alur visual cerita dari 3 frame cuplikan video (Start-Middle-End) secara natural dan menarik bagi pembeli antara ${minD}-${maxD} karakter.
+3. KATA KUNCI (KEYWORDS): WAJIB SEO-FRIENDLY, TINGKAT RELEVANSI TINGGI, dan didesain agar mudah ditemukan pada halaman utama. Hasilkan TEPAT ${kwTarget} kata kunci unik. No spasi (single keywords).
    - Urutan 1-10: Subjek & visual dominan nyata yang terlihat di frame.
-   - Urutan 11-25: Aksi, gerak tubuh, emosi, warna, pencahayaan.
+   - Urutan 11-25: Aksi, gerak tubuh, emosi, warna, pencahayaan, konsep.
    - Urutan 26-${kwTarget}: Hubungan konsep bisnis, kegunaan komersial, trend microstock.
    ${item.settings.keyConcepts ? `- ⭐ PRIORITAS UTAMA: Kata kunci "${item.settings.keyConcepts}" wajib ditempatkan di posisi 1-5!` : ''}
 4. LEGAL & TRADEMARK SAFETY: Hindari nama brand terlarang (Nike, Apple, iPhone, BMW, Sony, dsb). Ganti dengan nama generik (modern smartphone, athletic shoes, luxury car, dsb). Dilarang keras menulis brand kamera!
-5. KATEGORI PLATFORM RESMI (WAJIB PILIH DARI DAFTAR DI BAWAH): 
+5. KATEGORI PLATFORM RESMI (WAJIB PILIH DARI DAFTAR): 
+   - JANGAN PERNAH membuat kategori sendiri. JIKA kategori tidak ada, PILIH 'Other' atau kategori yang paling mendekati dan terdaftar.
    - Shutterstock: Berikan "shutterstock1" dan "shutterstock2" berisi 2 kategori resmi berbeda yang dipilih HANYA dari daftar ini: [${SHUTTERSTOCK_CATEGORIES.slice(0, 30).join(', ')}]
    - Adobe Stock: Berikan "adobeStock" berisi kategori tunggal yang wajib dipilih HANYA dari daftar ini: [${ADOBE_STOCK_CATEGORIES.slice(0, 25).join(', ')}]
    - Dreamstime: Berikan "dreamstime" berisi kategori tunggal yang wajib dipilih HANYA dari daftar ini: [${DREAMSTIME_CATEGORIES.slice(0, 20).join(', ')}]
@@ -1071,6 +1254,76 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
     throw new Error(lastError || "Semua model & kunci API Groq gagal merespons.");
   };
 
+  // Direct fetch to Mistral API Model
+  const fetchMistralDirect = async (item: QueueItem, systemPrompt: string, userPrompt: string): Promise<string> => {
+    const activeKeys = getActiveKeys('mistral');
+    if (activeKeys.length === 0) {
+      throw new Error("Mohon masukkan minimal 1 API Key Mistral di tab!");
+    }
+
+    const activeModels = Object.keys(selectedMistralModels).filter(m => selectedMistralModels[m]);
+    if (activeModels.length === 0) {
+      throw new Error("Pilih minimal satu model aktif Mistral!");
+    }
+
+    let lastError = "";
+    const totalAttempts = activeModels.length * activeKeys.length;
+
+    for (let attempt = 0; attempt < totalAttempts; attempt++) {
+      const mIdx = attempt % activeModels.length;
+      const kIdx = Math.floor(attempt / activeModels.length) % activeKeys.length;
+
+      const model = activeModels[mIdx];
+      const key = activeKeys[kIdx];
+        
+      const isVisionModel = model.includes('pixtral');
+      const base64s = item.videoFrames.length > 0 ? item.videoFrames : (item.base64 ? [item.base64] : []);
+        
+      const userContent: any[] = [{ type: 'text', text: userPrompt }];
+      if (isVisionModel && base64s.length > 0) {
+        base64s.forEach(b6 => {
+          userContent.push({
+            type: 'image_url',
+            image_url: { url: `data:image/png;base64,${b6}` }
+          });
+        });
+      }
+
+      try {
+        const response = await performProxyOrFallbackCall('mistral', {
+          model: model,
+          key: key,
+          payload: {
+            model: model,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: isVisionModel ? userContent : userPrompt }
+            ],
+            temperature: 0.15,
+            max_tokens: isVisionModel ? 1400 : 900,
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const rawText = (data.choices?.[0]?.message?.content || '').trim();
+          if (rawText) return rawText;
+        } else {
+           const errBody = await response.json().catch(() => ({}));
+           lastError = `Model [${model}] Kunci #${kIdx + 1} error: ${errBody?.error?.message || response.statusText}`;
+           
+           if (response.status === 429) {
+             await new Promise(r => setTimeout(r, 1000));
+           }
+        }
+      } catch (e: any) {
+        lastError = `Model [${model}] Kunci #${kIdx + 1} Network Fail: ${e.message}`;
+      }
+      await new Promise(r => setTimeout(r, speed3x ? 50 : 200));
+    }
+    throw new Error(lastError || "Semua model & kunci Mistral gagal.");
+  };
+
   // Process single metadata generation
   const processSingle = async (itemId: string) => {
     // Locate element
@@ -1089,8 +1342,10 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
         resultText = await fetchGeminiDirect(queueItem, sysPrompt, userPrompt);
       } else if (activeAuthProvider === 'groq') {
         resultText = await fetchGroqDirect(queueItem, sysPrompt, userPrompt);
+      } else if (activeAuthProvider === 'mistral') {
+        resultText = await fetchMistralDirect(queueItem, sysPrompt, userPrompt);
       } else {
-        throw new Error("Pilih provider koneksi (Gemini / Groq) terlebih dahulu!");
+        throw new Error("Pilih provider koneksi (Gemini / Groq / Mistral) terlebih dahulu!");
       }
 
       // JSON Extractor
@@ -1133,11 +1388,19 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
         let resultText = "";
         if (activeAuthProvider === 'gemini') {
           resultText = await fetchGeminiDirect(queueItem, sysPrompt, userPrompt);
-        } else {
+        } else if (activeAuthProvider === 'groq') {
           resultText = await fetchGroqDirect(queueItem, sysPrompt, userPrompt);
+        } else if (activeAuthProvider === 'mistral') {
+          resultText = await fetchMistralDirect(queueItem, sysPrompt, userPrompt);
+        } else {
+          resultText = await fetchGeminiDirect(queueItem, sysPrompt, userPrompt);
         }
 
         let cleanJson = resultText.trim();
+        const mdMatchRetry = cleanJson.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (mdMatchRetry) {
+          cleanJson = mdMatchRetry[1].trim();
+        }
         const bStart = cleanJson.indexOf('{');
         const bEnd = cleanJson.lastIndexOf('}');
         if (bStart !== -1 && bEnd > bStart) {
@@ -1164,7 +1427,7 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
     setProgressPercent(0);
     setProgressStatus("Menyiapkan pemrosesan batch...");
 
-    const concurrencyLimit = speed3x ? 3 : 1;
+    const concurrencyLimit = noLimitMode ? 10 : speed3x ? 3 : 1;
     let finished = 0;
     const total = listPending.length;
 
@@ -1821,8 +2084,8 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
                       )}
 
                     {/* Engine Source Selection Tabs */}
-                    <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-2xl mb-4 text-center">
-                      {(['gemini', 'groq', 'helper'] as AuthProvider[]).map((p) => {
+                    <div className="grid grid-cols-4 gap-1 bg-slate-100 p-1 rounded-2xl mb-4 text-center">
+                      {(['gemini', 'groq', 'mistral', 'helper'] as AuthProvider[]).map((p) => {
                         const isTabActive = activeAuthProvider === p;
                         return (
                           <button
@@ -1835,7 +2098,7 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
                                 : 'text-slate-500 hover:text-slate-900'
                             }`}
                           >
-                            {p === 'gemini' ? '🔮 Gemini' : p === 'groq' ? '⚡ Groq' : 'Bantuan'}
+                            {p === 'gemini' ? '🔮 Gemini' : p === 'groq' ? '⚡ Groq' : p === 'mistral' ? '🌐 Mistral' : 'Bantuan'}
                           </button>
                         );
                       })}
@@ -2240,6 +2503,130 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
                       </div>
                     )}
 
+                    {/* Mistral Config Tab View */}
+                    {activeAuthProvider === 'mistral' && (
+                      <div className="space-y-4">
+                        <div className="border border-slate-200 rounded-2xl overflow-hidden bg-slate-50/50">
+                          <div 
+                            onClick={() => setIsMistralVaultOpen(!isMistralVaultOpen)}
+                            className="flex items-center justify-between p-3.5 bg-slate-100/50 hover:bg-slate-100 cursor-pointer transition-colors border-b border-slate-200"
+                          >
+                            <span className="text-xs font-extrabold text-slate-700 flex items-center">
+                              <CheckCircle2 className="w-4 h-4 mr-2 text-violet-500" />
+                              Vault Key Mistral ({getActiveKeys('mistral')?.length || 0}/5)
+                            </span>
+                            <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${isMistralVaultOpen ? 'rotate-180' : ''}`} />
+                          </div>
+                          <AnimatePresence>
+                            {isMistralVaultOpen && (
+                              <motion.div 
+                                initial={{ height: 0 }}
+                                animate={{ height: 'auto' }}
+                                exit={{ height: 0 }}
+                                className="overflow-hidden bg-white p-4 space-y-3 border-t border-slate-100"
+                              >
+                                {mistralKeys.map((k, idx) => (
+                                  <div key={`mistral-key-${idx}`} className="relative">
+                                    <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-[10px] font-bold text-slate-400">
+                                      #{idx + 1}
+                                    </span>
+                                    <input
+                                      type="password"
+                                      value={k}
+                                      onChange={(e) => handleMistralKeyChange(idx, e.target.value)}
+                                      placeholder={`Masukkan Kunci Mistral Ke-${idx + 1}`}
+                                      className="w-full text-xs pl-8 pr-3 py-3 border border-slate-200 rounded-xl focus:outline-none focus:border-violet-500 font-mono bg-slate-50/50 hover:bg-white focus:bg-white transition-colors"
+                  />
+                  </div>
+                                ))}
+
+                                {/* Diagnose Testing Buttons Mistral */}
+                                <div className="flex flex-col space-y-2 mt-3 pt-2.5 border-t border-slate-100">
+                                  <div className="flex items-center justify-between">
+                                    <button
+                                      type="button"
+                                      disabled={testMistralStatus === 'testing'}
+                                      onClick={testMistralConn}
+                                      className="px-3 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl text-[10px] font-bold transition-all flex items-center space-x-1.5 active:scale-95"
+                                    >
+                                      {testMistralStatus === 'testing' ? (
+                                        <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin text-violet-500" />
+                                      ) : (
+                                        <CheckCircle2 className="w-3.5 h-3.5 mr-1.5 text-emerald-500" />
+                                      )}
+                                      <span>Uji Koneksi Kunci</span>
+                                    </button>
+                                  </div>
+                                  <div className={`text-[11px] leading-relaxed break-words whitespace-pre-wrap p-2.5 rounded-xl ${
+                                    testMistralStatus === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100 font-semibold' :
+                                    testMistralStatus === 'err' ? 'bg-rose-50 text-rose-600 border border-rose-100 font-semibold text-xs' : 'text-slate-500 bg-slate-50 border border-slate-100'
+                                  }`}>
+                                    {testMistralMsg}
+                                  </div>
+
+                                  {/* Rincian Diagnosa Berbagai Model Mistral */}
+                                  {Object.keys(mistralDiagnostics).length > 0 && (
+                                    <div className="mt-2.5 space-y-2 bg-slate-50 border border-slate-150 p-3 rounded-2xl">
+                                      <div className="text-[9px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center justify-between">
+                                        <span>Status Koneksi per Model</span>
+                                        <span className="text-violet-600 font-mono">Mistral Engine</span>
+                                      </div>
+                                      
+                                      {Object.entries(mistralDiagnostics).map(([slotIdxStr, modelsRecord]) => {
+                                        const slotIdx = parseInt(slotIdxStr);
+                                        const keySnippet = mistralKeys[slotIdx]?.trim() || '';
+                                        const shortKey = keySnippet.length > 8 ? `${keySnippet.slice(0, 4)}...${keySnippet.slice(-4)}` : 'Sandi';
+
+                                        return (
+                                          <div key={`mis-dia-slot-${slotIdx}`} className="bg-white rounded-xl border border-slate-100 p-2.5 shadow-sm">
+                                            <div className="flex items-center justify-between border-b border-slate-100 pb-1.5 mb-1.5">
+                                              <span className="text-[10px] font-extrabold text-slate-700">Slot {slotIdx + 1} ({shortKey})</span>
+                                            </div>
+                                            <div className="grid grid-cols-1 gap-1">
+                                              {Object.entries(modelsRecord).map(([model, diag]) => (
+                                                <div key={model} className="flex items-center justify-between py-1">
+                                                  <span className="text-[10px] text-slate-600 truncate">{model}</span>
+                                                  <span className={`text-[9px] font-medium ${diag.status === 'success' ? 'text-emerald-600' : 'text-rose-500'}`}>
+                                                    {diag.message}
+                                                  </span>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                        {/* Mistral Model Selection */}
+                        <div className="space-y-2">
+                           <label className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">
+                             Model Prioritas Mistral
+                           </label>
+                           <div className="space-y-1.5 bg-slate-50 p-3 rounded-2xl border border-slate-200 font-medium">
+                             {Object.keys(selectedMistralModels).map((model) => (
+                               <label 
+                                 key={model} 
+                                 className="flex items-center space-x-2.5 text-xs font-semibold text-slate-700 cursor-pointer p-2 hover:bg-slate-200/40 rounded-xl transition-all"
+                               >
+                                 <input
+                                   type="checkbox"
+                                   checked={selectedMistralModels[model]}
+                                   onChange={() => setSelectedMistralModels(prev => ({ ...prev, [model]: !prev[model] }))}
+                                   className="rounded border-slate-300 text-violet-600 focus:ring-violet-500 h-4 w-4"
+                                 />
+                                 <span>{model}</span>
+                               </label>
+                             ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Guide Tab */}
                     {activeAuthProvider === 'helper' && (
                       <div className="p-4 bg-violet-50/50 rounded-2xl border border-violet-100 text-xs space-y-3">
@@ -2410,66 +2797,290 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
                       </p>
                     </div>
                   ) : (
-                    items.map((item, index) => {
-                      const isExpanded = expandedItemId === item.id;
-                      const seoDetail = measureSEOQuality(item);
-                      const titleBrandViolations = scanIPViolations(item.metadata.title);
-                      const descBrandViolations = scanIPViolations(item.metadata.description);
-                      const kwsBrandViolations = item.metadata.keywords.filter(k => scanIPViolations(k).length > 0);
-                      const totalBrands = Array.from(new Set([...titleBrandViolations, ...descBrandViolations, ...kwsBrandViolations]));
+                    <>
+                      {/* Bulk Actions Panel */}
+                      <div className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-2xl shadow-sm">
+                        <div className="flex items-center space-x-2">
+                           <input 
+                             type="checkbox" 
+                             checked={selectedItemIds.size === items.length && items.length > 0} 
+                             onChange={toggleSelectAll}
+                             className="w-4 h-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                           />
+                           <span className="text-[10px] font-bold text-slate-600">Pilih Semua ({selectedItemIds.size})</span>
+                        </div>
+                        {selectedItemIds.size > 0 && (
+                          <div className="flex items-center space-x-2">
+                             <input 
+                               type="text"
+                               placeholder="Konsep Bulk..."
+                               className="text-[10px] px-2 py-1.5 border border-slate-200 rounded-lg w-32"
+                               onKeyDown={(e) => {
+                                 if (e.key === 'Enter') {
+                                   handleBulkUpdateKeyConcepts((e.target as HTMLInputElement).value);
+                                   (e.target as HTMLInputElement).value = '';
+                                 }
+                               }}
+                             />
+                             <span className="text-[9px] text-slate-400">Tekan Enter</span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {items.map((item, index) => {
+                        const isExpanded = expandedItemId === item.id;
+                        const seoDetail = measureSEOQuality(item);
+                        const titleBrandViolations = scanIPViolations(item.metadata.title);
+                        const descBrandViolations = scanIPViolations(item.metadata.description);
+                        const kwsBrandViolations = item.metadata.keywords.filter(k => scanIPViolations(k).length > 0);
+                        const totalBrands = Array.from(new Set([...titleBrandViolations, ...descBrandViolations, ...kwsBrandViolations]));
 
-                      return (
-                        <div 
-                          key={item.id} 
-                          className={`border rounded-2xl overflow-hidden transition-all duration-300 ${
-                            isExpanded 
-                              ? 'border-violet-400 bg-violet-55/5 shadow-md shadow-violet-100/40' 
-                              : 'border-slate-200 bg-white hover:border-violet-200 shadow-sm'
-                          }`}
-                        >
-                          {/* Accordion clickable header row */}
+                        return (
                           <div 
-                            onClick={() => setExpandedItemId(isExpanded ? null : item.id)}
-                            className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer hover:bg-slate-50/50 transition-colors"
+                            key={item.id} 
+                            className={`border rounded-2xl overflow-hidden transition-all duration-300 ${
+                              isExpanded 
+                                ? 'border-violet-400 bg-violet-55/5 shadow-md shadow-violet-100/40' 
+                                : 'border-slate-200 bg-white hover:border-violet-200 shadow-sm'
+                            }`}
                           >
-                            <div className="flex items-center space-x-3.5 min-w-0">
-                              
-                              {/* Visual Mini Thumbnails */}
-                              <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 shadow-sm flex-shrink-0 flex items-center justify-center">
-                                {item.preview ? (
-                                  <img 
-                                    src={item.preview} 
-                                    alt={item.name} 
-                                    className="w-full h-full object-cover" 
-                                    referrerPolicy="no-referrer"
-                                  />
-                                ) : (
-                                  item.type === 'video' ? <Video className="w-4 h-4 text-violet-500" /> :
-                                  item.type === 'vector' ? <PenTool className="w-4 h-4 text-violet-500" /> :
-                                  <ImageIcon className="w-4 h-4 text-slate-400" />
-                                )}
-                              </div>
-
-                              <div className="min-w-0">
-                                <div className="flex items-center space-x-2">
-                                  <span className="text-[8px] font-extrabold uppercase tracking-wider bg-slate-100 border border-slate-200 text-slate-500 px-2 py-0.5 rounded">
-                                    {item.type}
-                                  </span>
-                                  <h4 className="text-xs font-bold text-slate-800 truncate max-w-[160px] sm:max-w-[240px]">
-                                    {item.name}
-                                  </h4>
+                            {/* Accordion clickable header row */}
+                            <div className="flex items-center p-4 gap-2">
+                               <input 
+                                 type="checkbox" 
+                                 checked={selectedItemIds.has(item.id)} 
+                                 onChange={() => toggleItemSelected(item.id)}
+                                 className="w-4 h-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                               />
+                               <div 
+                                onClick={() => setExpandedItemId(isExpanded ? null : item.id)}
+                                className="flex-1 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer hover:bg-slate-50/50 transition-colors"
+                              >
+                                <div className="flex items-center space-x-3.5 min-w-0">
+                                  
+                                  {/* Visual Mini Thumbnails */}
+                                  <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 shadow-sm flex-shrink-0 flex items-center justify-center">
+                                    {item.preview ? (
+                                      <img 
+                                        src={item.preview} 
+                                        alt={item.name} 
+                                        className="w-full h-full object-cover" 
+                                        referrerPolicy="no-referrer"
+                                      />
+                                    ) : (
+                                      item.type === 'video' ? <Video className="w-4 h-4 text-violet-500" /> :
+                                      item.type === 'vector' ? <PenTool className="w-4 h-4 text-violet-500" /> :
+                                      <ImageIcon className="w-4 h-4 text-slate-400" />
+                                    )}
+                                  </div>
+  
+                                  <div className="min-w-0">
+                                    <div className="flex items-center space-x-2">
+                                      <span className="text-[8px] font-extrabold uppercase tracking-wider bg-slate-100 border border-slate-200 text-slate-500 px-2 py-0.5 rounded">
+                                        {item.type}
+                                      </span>
+                                      <h4 className="text-xs font-bold text-slate-800 truncate max-w-[160px] sm:max-w-[240px]">
+                                        {item.name}
+                                      </h4>
+                                    </div>
+                                    {item.status === 'success' && item.metadata.title ? (
+                                      <p className="text-[10px] text-slate-400 truncate mt-1 italic">
+                                        "{item.metadata.title}"
+                                      </p>
+                                    ) : (
+                                      <p className="text-[9px] text-slate-400 mt-1 font-semibold">
+                                        Klik untuk merinci editor metadata
+                                      </p>
+                                    )}
+                                  </div>
                                 </div>
-                                {item.status === 'success' && item.metadata.title ? (
-                                  <p className="text-[10px] text-slate-400 truncate mt-1 italic">
-                                    "{item.metadata.title}"
-                                  </p>
-                                ) : (
-                                  <p className="text-[9px] text-slate-400 mt-1 font-semibold">
-                                    Klik untuk merinci editor metadata
-                                  </p>
-                                )}
                               </div>
                             </div>
+                            {/* Status badges, diagnostics and runners */}
+                            <div className="flex items-center justify-between sm:justify-end gap-3.5" onClick={(e) => e.stopPropagation()}>
+                              
+                              {/* Dynamic state check badge */}
+                              {item.status === 'processing' && (
+                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[9px] font-extrabold bg-violet-50 border border-violet-100 text-violet-700 animate-pulse">
+                                  <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                                  Proses AI...
+                                </span>
+                              )}
+                              {item.status === 'success' && (
+                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[9px] font-extrabold bg-emerald-50 border border-emerald-100 text-emerald-800">
+                                  ✓ Selesai
+                                </span>
+                              )}
+                              {item.status === 'error' && (
+                                <span 
+                                  title={item.errorMsg || 'API Error'}
+                                  className="inline-flex items-center px-2.5 py-1 rounded-full text-[9px] font-extrabold bg-red-50 border border-red-100 text-red-700 max-w-[120px] truncate"
+                                >
+                                  ⚠ Gagal / Error
+                                </span>
+                              )}
+                              {item.status === 'pending' && (
+                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[9px] font-extrabold bg-slate-100 border border-slate-200 text-slate-500">
+                                  Antrean
+                                </span>
+                              )}
+
+                              {/* Manual run button */}
+                              <button
+                                onClick={() => processSingle(item.id)}
+                                disabled={item.status === 'processing' || getActiveKeys(activeAuthProvider).length === 0}
+                                className="px-3.5 py-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 text-white font-extrabold rounded-lg text-[10px] shadow-sm flex items-center active:scale-95 transition-all disabled:opacity-40 disabled:scale-100 cursor-pointer"
+                              >
+                                <Sparkles className="w-3.5 h-3.5 mr-1" />
+                                <span>Generate</span>
+                              </button>
+
+                              {/* Remove specific */}
+                              <button
+                                onClick={() => removeItem(item.id)}
+                                className="p-1 px-1.5 text-slate-400 hover:text-red-500 rounded hover:bg-red-50 transition-colors cursor-pointer"
+                                title="Hapus dari antrean"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+
+                              {isExpanded ? (
+                                <ChevronUp className="w-4 h-4 text-slate-400" />
+                              ) : (
+                                <ChevronDown className="w-4 h-4 text-slate-400" />
+                              )}
+
+                            </div>
+
+                          {/* EXPANDED INNER LIVE PANEL EDITOR FORM */}
+                          {isExpanded && (
+                            <div className="p-6 border-t border-slate-100 bg-slate-50/20 space-y-5">
+                              
+                              {/* Display error message details if crashed */}
+                              {item.status === 'error' && item.errorMsg && (
+                                <div className="p-3 bg-red-50 border border-red-100 rounded-xl flex items-start space-x-2 text-red-800 text-[11px] font-semibold">
+                                  <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0 text-red-500" />
+                                  <span>{item.errorMsg}</span>
+                                </div>
+                              )}
+
+                              {item.status === 'pending' ? (
+                                <div className="py-12 text-center space-y-3">
+                                  <Sparkles className="w-8 h-8 mx-auto text-violet-450 animate-bounce" />
+                                  <h4 className="text-xs font-extrabold text-slate-700">Metadata Belum Dibuat</h4>
+                                  <p className="text-[10px] text-slate-400 font-semibold max-w-xs mx-auto leading-normal">
+                                    Klik tombol <b className="text-violet-600">"Generate"</b> di samping kanan untuk memicu model AI memproses judul, tags, dan deskripsi ramah SEO.
+                                  </p>
+                                </div>
+                              ) : item.status === 'processing' ? (
+                                <div className="py-12 text-center space-y-3">
+                                  <RefreshCw className="w-8 h-8 mx-auto text-violet-600 animate-spin" />
+                                  <h4 className="text-xs font-extrabold text-slate-705">Menganalisis Visual dengan AI</h4>
+                                  <p className="text-[10px] text-slate-400 font-semibold max-w-xs mx-auto leading-normal">
+                                    Sedang mengunggah visual payload dan mengekstrak kategori komersial microstock...
+                                  </p>
+                                </div>
+                              ) : (
+                                <>
+                                  {/* Diagnostic indicators block: IP compliance and SEO score rating */}
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    
+                                    {/* IP Compliance Panel */}
+                                    <div className={`p-4 rounded-2xl border ${
+                                      totalBrands.length > 0 
+                                        ? 'bg-amber-50/30 border-amber-200/80 text-amber-900' 
+                                        : 'bg-emerald-50/20 border-emerald-100/80 text-emerald-900'
+                                    } flex flex-col justify-between`}>
+                                      <div>
+                                        <div className="flex items-center space-x-2 text-xs font-bold">
+                                          <span>Validasi Keselamatan Haki / IP:</span>
+                                          {totalBrands.length > 0 ? (
+                                            <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[9px] rounded font-black max-w-xs truncate">
+                                              Saran Brand Ganti ({totalBrands.length})
+                                            </span>
+                                          ) : (
+                                            <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 text-[9px] rounded font-black">
+                                              Lolos (Sangat Aman)
+                                            </span>
+                                          )}
+                                        </div>
+                                        {totalBrands.length > 0 ? (
+                                          <div className="mt-2 text-[10px] text-amber-700 font-semibold space-y-1">
+                                            {totalBrands.map((brand, i) => (
+                                              <p key={i}>• {brand}</p>
+                                            ))}
+                                          </div>
+                                        ) : (
+                                          <p className="mt-2 text-[10px] text-emerald-700 font-semibold">
+                                            Tidak terdeteksi elemen brand atau Haki.
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                    
+                                    {/* SEO Score Rating Panel */}
+                                    <div className={`p-4 rounded-2xl border ${
+                                      seoDetail.score < 70 
+                                        ? 'bg-red-50/30 border-red-100 text-red-900' 
+                                        : 'bg-emerald-50/20 border-emerald-100 text-emerald-900'
+                                    } flex flex-col justify-between`}>
+                                      <div>
+                                        <div className="flex items-center justify-between text-xs font-bold">
+                                          <span>Skor SEO Optimal:</span>
+                                          <span className="font-black text-xs">{seoDetail.score}/100</span>
+                                        </div>
+                                        <div className="h-1.5 w-full bg-slate-100 rounded-full mt-2 overflow-hidden">
+                                          <div 
+                                            className={`h-full ${seoDetail.score < 70 ? 'bg-red-400' : 'bg-emerald-500'}`}
+                                            style={{ width: `${seoDetail.score}%` }}
+                                          />
+                                        </div>
+                                        <p className="mt-2 text-[10px] opacity-70 font-semibold leading-relaxed">
+                                          {seoDetail.score < 70 ? 'Perlu optimasi judul/deskripsi.' : 'Metadata SEO sangat optimal.'}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Editor Metadata Form Sections */}
+
+                                  {/* Title section */}
+                                  <div className="space-y-2">
+                                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Judul (Title)</label>
+                                    <input 
+                                      type="text" 
+                                      value={item.metadata.title}
+                                      onChange={(e) => updateMetadata(item.id, { ...item.metadata, title: e.target.value })}
+                                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-violet-500 transition-all outline-none"
+                                    />
+                                  </div>
+
+                                  {/* Description section */}
+                                  <div className="space-y-2">
+                                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Deskripsi (Description)</label>
+                                    <textarea 
+                                      value={item.metadata.description}
+                                      onChange={(e) => updateMetadata(item.id, { ...item.metadata, description: e.target.value })}
+                                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-violet-500 transition-all outline-none min-h-[80px]"
+                                    />
+                                  </div>
+
+                                  {/* Keywords selection */}
+                                  <div className="space-y-2">
+                                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Keywords</label>
+                                    <textarea 
+                                      value={item.metadata.keywords.join(', ')}
+                                      onChange={(e) => updateMetadata(item.id, { ...item.metadata, keywords: e.target.value.split(',').map(k => k.trim()) })}
+                                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-violet-500 transition-all outline-none min-h-[100px]"
+                                    />
+                                  </div>
+                                  
+                                </>
+                              )}
+                            </div>
+                          )}
+
+                          </div>
 
                             {/* Status badges, diagnostics and runners */}
                             <div className="flex items-center justify-between sm:justify-end gap-3.5" onClick={(e) => e.stopPropagation()}>
@@ -2529,6 +3140,7 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
                           </div>
 
                           {/* EXPANDED INNER LIVE PANEL EDITOR FORM */}
+                          </div>
                           {isExpanded && (
                             <div className="p-6 border-t border-slate-100 bg-slate-50/20 space-y-5">
                               
