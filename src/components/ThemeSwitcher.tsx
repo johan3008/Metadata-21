@@ -3,19 +3,15 @@ import { Sun, Moon, Monitor } from 'lucide-react';
 
 export default function ThemeSwitcher() {
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(() => {
-    if (typeof window !== 'undefined') {
-      return (localStorage.getItem('theme') as 'light' | 'dark' | 'system') || 'system';
-    }
-    return 'system';
+    return (localStorage.getItem('theme') as 'light' | 'dark' | 'system') || 'system';
   });
 
   useEffect(() => {
     const root = window.document.documentElement;
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    
-    // Function to apply the class
-    const update = (t: 'light' | 'dark' | 'system') => {
-      const isDark = t === 'dark' || (t === 'system' && mediaQuery.matches);
+
+    const applyTheme = () => {
+      const isDark = theme === 'dark' || (theme === 'system' && mediaQuery.matches);
       if (isDark) {
         root.classList.add('dark');
       } else {
@@ -23,38 +19,43 @@ export default function ThemeSwitcher() {
       }
     };
 
-    update(theme);
+    applyTheme();
     localStorage.setItem('theme', theme);
 
-    // Listen to changes if 'system'
+    // Listener for system preference changes
     const handler = () => {
-      if (theme === 'system') update('system');
+      if (theme === 'system') applyTheme();
     };
     mediaQuery.addEventListener('change', handler);
-
     return () => mediaQuery.removeEventListener('change', handler);
   }, [theme]);
 
+  const buttonClass = (t: 'light' | 'dark' | 'system') => 
+    `p-2 rounded-full transition-colors ${theme === t ? 'bg-slate-200 dark:bg-slate-700' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`;
+
   return (
-    <div className="fixed top-6 right-6 z-50 rounded-full border border-slate-200/50 bg-white/70 p-1 shadow-lg backdrop-blur-md dark:border-slate-800/50 dark:bg-slate-900/70">
-      <div className="flex items-center gap-0.5">
-        {(['light', 'dark', 'system'] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTheme(t)}
-            className={`flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 ${
-              theme === t
-                ? 'bg-slate-200 text-slate-900 dark:bg-slate-700 dark:text-white'
-                : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'
-            }`}
-            title={`Switch to ${t} mode`}
-          >
-            {t === 'light' && <Sun size={16} />}
-            {t === 'dark' && <Moon size={16} />}
-            {t === 'system' && <Monitor size={16} />}
-          </button>
-        ))}
-      </div>
+    <div className="fixed top-20 right-6 z-50 p-1 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm rounded-full shadow-lg border border-slate-200 dark:border-slate-700 flex items-center gap-1">
+      <button 
+        onClick={() => setTheme('light')} 
+        className={`${buttonClass('light')} ${theme === 'light' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600' : ''}`}
+        title="Light Mode"
+      >
+        <Sun size={18} />
+      </button>
+      <button 
+        onClick={() => setTheme('dark')} 
+        className={`${buttonClass('dark')} ${theme === 'dark' ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600' : ''}`}
+        title="Dark Mode"
+      >
+        <Moon size={18} />
+      </button>
+      <button 
+        onClick={() => setTheme('system')} 
+        className={`${buttonClass('system')} ${theme === 'system' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600' : ''}`}
+        title="System Preference"
+      >
+        <Monitor size={18} />
+      </button>
     </div>
   );
 }
