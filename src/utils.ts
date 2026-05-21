@@ -388,7 +388,50 @@ const SPAM_KEYWORDS_BLACKLIST = [
   'professional', 'creative', 'modern', 'contemporary',
   'minimal', 'clean', 'simple', 'basic',
   'generic', 'standard', 'common', 'ordinary',
-  'typical', 'regular', 'normal', 'average'
+  'typical', 'regular', 'normal', 'average',
+  // Generic adjectives with low buyer intent - TASK 2 ENHANCED
+  'adorable', 'bright', 'colorful', 'concept', 'holiday',
+  'country', 'blooming', 'daylight', 'domestic', 'cute concept',
+  'holiday mood', 'country style', 'artistic', 'dreamy',
+  'magical', 'ethereal', 'mystical', 'romantic', 'nostalgic',
+  'sentimental', 'emotional', 'dramatic', 'intense', 'powerful',
+  'strong', 'weak', 'soft', 'hard', 'rough', 'smooth',
+  'warm', 'cold', 'hot', 'fresh', 'old', 'new', 'young',
+  'happy', 'sad', 'angry', 'calm', 'peaceful', 'quiet',
+  'loud', 'busy', 'empty', 'full', 'rich', 'poor',
+  'big', 'small', 'large', 'tiny', 'huge', 'massive',
+  'little', 'great', 'good', 'bad', 'fine', 'okay',
+  'lovely', 'pretty', 'handsome', 'ugly', 'plain',
+  'fancy', 'simple', 'complex', 'easy', 'difficult'
+];
+
+// Weak adjective filter for single keyword mode - TASK 7 ENHANCED
+const WEAK_ADJECTIVE_BLACKLIST = [
+  'adorable', 'beautiful', 'bright', 'colorful', 'nice', 'amazing',
+  'cute', 'lovely', 'pretty', 'gorgeous', 'stunning', 'wonderful',
+  'fantastic', 'great', 'good', 'fine', 'excellent', 'superb',
+  'awesome', 'cool', 'neat', 'tidy', 'clean', 'pure', 'simple',
+  'basic', 'plain', 'fancy', 'elegant', 'classy', 'stylish',
+  'trendy', 'modern', 'contemporary', 'traditional', 'classic',
+  'vintage', 'retro', 'old', 'new', 'fresh', 'clean',
+  'clear', 'bright', 'dark', 'light', 'heavy', 'soft',
+  'hard', 'smooth', 'rough', 'gentle', 'kind', 'sweet',
+  'warm', 'cozy', 'comfortable', 'pleasant', 'agreeable',
+  'delightful', 'charming', 'appealing', 'attractive', 'alluring',
+  'captivating', 'engaging', 'interesting', 'exciting', 'thrilling',
+  'boring', 'dull', 'plain', 'ordinary', 'common', 'usual',
+  'regular', 'standard', 'normal', 'typical', 'average',
+  'general', 'universal', 'global', 'local', 'regional',
+  'national', 'international', 'public', 'private', 'personal',
+  'individual', 'single', 'double', 'triple', 'multiple',
+  'various', 'several', 'many', 'few', 'some', 'any',
+  'all', 'every', 'each', 'both', 'either', 'neither',
+  'none', 'no', 'yes', 'maybe', 'perhaps', 'possibly',
+  'probably', 'certainly', 'definitely', 'absolutely', 'completely',
+  'totally', 'fully', 'partially', 'partly', 'mostly', 'mainly',
+  'generally', 'specifically', 'particularly', 'especially', 'notably',
+  'remarkably', 'significantly', 'considerably', 'substantially',
+  'relatively', 'comparatively', 'approximately', 'roughly', 'about'
 ];
 
 /**
@@ -506,22 +549,26 @@ export function calculateKeywordPriority(keyword: string, visualContext: {
   const lowerKeyword = keyword.toLowerCase().trim();
   const wordCount = lowerKeyword.split(/\s+/).length;
   
-  // Priority 1: Exact object match (highest priority)
+  // Priority 1: Exact object match (highest priority) - TASK 1 ENHANCED
   if (visualContext.mainObjects?.some(obj => 
-    lowerKeyword.includes(obj.toLowerCase()) || obj.toLowerCase().includes(lowerKeyword)
+    lowerKeyword === obj.toLowerCase() || lowerKeyword.includes(obj.toLowerCase())
   )) {
-    score += 100;
+    score += 150;
   }
   
-  // Priority 2: Main subject relevance
-  if (visualContext.mainObjects?.some(obj => 
+  // Priority 2: Main subject relevance with single keyword boost
+  if (wordCount === 1 && visualContext.mainObjects?.some(obj => 
+    lowerKeyword === obj.toLowerCase()
+  )) {
+    score += 120;
+  } else if (visualContext.mainObjects?.some(obj => 
     lowerKeyword.includes(obj.toLowerCase())
   )) {
     score += 80;
   }
   
-  // Priority 3: Commercial usage intent
-  const commercialTerms = ['copy space', 'background', 'banner', 'template', 'flat lay', 'top view', 'mockup', 'advertising'];
+  // Priority 3: Commercial usage intent - TASK 8 ENHANCED
+  const commercialTerms = ['copy space', 'background', 'banner', 'template', 'flat lay', 'top view', 'mockup', 'advertising', 'isolated', 'white background'];
   if (commercialTerms.some(term => lowerKeyword.includes(term))) {
     score += 70;
   }
@@ -533,14 +580,19 @@ export function calculateKeywordPriority(keyword: string, visualContext: {
     score += 60;
   }
   
-  // Priority 5: Long-tail niche keywords (2-4 words ideal)
+  // Priority 5: Long-tail niche keywords (2-4 words ideal) - TASK 2 & 3 ENHANCED
   if (wordCount >= 2 && wordCount <= 4) {
     score += 50;
   } else if (wordCount === 1) {
-    score += 30;
+    // Single keywords get bonus if they're objects (not adjectives)
+    if (!WEAK_ADJECTIVE_BLACKLIST.includes(lowerKeyword)) {
+      score += 45;
+    } else {
+      score += 20;
+    }
   } else if (wordCount > 4) {
-    // Penalty for too long keywords
-    score -= 20;
+    // Penalty for too long keywords - TASK 3 ENHANCED
+    score -= 30;
   }
   
   // Priority 6: Scene/mood relevance
@@ -548,14 +600,19 @@ export function calculateKeywordPriority(keyword: string, visualContext: {
     score += 40;
   }
   
-  // Penalty: Generic/spam keywords
+  // Penalty: Generic/spam keywords - TASK 2 & 7 ENHANCED
   if (SPAM_KEYWORDS_BLACKLIST.some(spam => lowerKeyword === spam || lowerKeyword.includes(spam))) {
+    score -= 150;
+  }
+  
+  // Penalty: Weak adjectives as standalone keywords - TASK 7 ENHANCED
+  if (WEAK_ADJECTIVE_BLACKLIST.includes(lowerKeyword) && wordCount === 1) {
     score -= 100;
   }
   
   // Penalty: Too short or single generic word
-  if (lowerKeyword.length <= 3 && !['3d', '4k', 'hd'].includes(lowerKeyword)) {
-    score -= 20;
+  if (lowerKeyword.length <= 3 && !['3d', '4k', 'hd', 'ai', 'ui', 'ux'].includes(lowerKeyword)) {
+    score -= 30;
   }
   
   return score;
@@ -563,7 +620,7 @@ export function calculateKeywordPriority(keyword: string, visualContext: {
 
 /**
  * TASK 2 & 5: Generate long-tail keyword variations with commercial intent
- * Creates searchable phrases buyers actually use
+ * Creates searchable phrases buyers actually use - TASK 2 ENHANCED
  */
 export function generateLongTailKeywords(
   keywords: string[], 
@@ -579,26 +636,22 @@ export function generateLongTailKeywords(
   const longTailKeywords: string[] = [];
   const seen = new Set<string>();
   
-  // Commercial modifiers for long-tail generation
-  const commercialModifiers = [
-    'modern', 'professional', 'creative', 'minimal', 'vintage',
-    'cozy', 'elegant', 'business', 'lifestyle', 'commercial'
-  ];
+  // Filter out weak adjectives from main objects - TASK 7 ENHANCED
+  const strongKeywords = keywords.filter(kw => !WEAK_ADJECTIVE_BLACKLIST.includes(kw.toLowerCase()));
   
-  // Composition modifiers
-  const compositionModifiers = [
-    'flat lay', 'top view', 'overhead', 'close-up', 'macro',
-    'copy space', 'background', 'isolated'
-  ];
+  // Get main objects (first 5 strong keywords are typically main subjects)
+  const mainObjects = strongKeywords.slice(0, 5);
   
-  // Get main objects (first 5 keywords are typically main subjects)
-  const mainObjects = keywords.slice(0, 5);
-  
-  // Generate combination keywords from main objects
+  // Generate combination keywords from main objects - TASK 4 ENHANCED
   for (let i = 0; i < Math.min(mainObjects.length, 4); i++) {
     for (let j = i + 1; j < Math.min(mainObjects.length, 5); j++) {
       const combined = `${mainObjects[i]} ${mainObjects[j]}`;
       const reverseCombined = `${mainObjects[j]} ${mainObjects[i]}`;
+      
+      // Skip if contains weak adjectives - TASK 7 ENHANCED
+      if (WEAK_ADJECTIVE_BLACKLIST.some(adj => combined.toLowerCase().includes(adj))) {
+        continue;
+      }
       
       if (combined.length <= 50 && !seen.has(combined.toLowerCase())) {
         longTailKeywords.push(combined);
@@ -611,39 +664,29 @@ export function generateLongTailKeywords(
       }
     }
     
-    // Add commercial modifier combinations for main keywords
-    if (i < 3) {
-      commercialModifiers.slice(0, 5).forEach(modifier => {
-        const modified = `${modifier} ${mainObjects[i]}`;
-        if (!seen.has(modified.toLowerCase()) && modified.length <= 50) {
-          longTailKeywords.push(modified);
-          seen.add(modified.toLowerCase());
-        }
-      });
-      
-      // Add composition combinations
-      compositionModifiers.slice(0, 4).forEach(comp => {
-        const compModified = `${mainObjects[i]} ${comp}`;
-        if (!seen.has(compModified.toLowerCase()) && compModified.length <= 50) {
-          longTailKeywords.push(compModified);
-          seen.add(compModified.toLowerCase());
-        }
-      });
-    }
+    // Add composition combinations only - TASK 6 ENHANCED
+    const compositionModifiers = ['flat lay', 'top view', 'overhead', 'isolated', 'copy space', 'white background'];
+    compositionModifiers.forEach(comp => {
+      const compModified = `${mainObjects[i]} ${comp}`;
+      if (!seen.has(compModified.toLowerCase()) && compModified.length <= 50) {
+        longTailKeywords.push(compModified);
+        seen.add(compModified.toLowerCase());
+      }
+    });
   }
   
-  // Add niche intent phrases based on visual context
+  // Add niche intent phrases based on visual context - TASK 5 ENHANCED
   if (visualContext?.mainObject) {
     const nichePhrases = [
-      `${visualContext.mainObject} for commercial use`,
       `${visualContext.mainObject} background`,
-      `${visualContext.mainObject} with copy space`,
+      `${visualContext.mainObject} isolated`,
       `professional ${visualContext.mainObject}`,
-      `${visualContext.mainObject} flat lay`
+      `${visualContext.mainObject} flat lay`,
+      `${visualContext.mainObject} top view`
     ];
     
     nichePhrases.forEach(phrase => {
-      if (!seen.has(phrase.toLowerCase()) && phrase.length <= 50) {
+      if (!seen.has(phrase.toLowerCase()) && phrase.length <= 50 && phrase.split(' ').length <= 4) {
         longTailKeywords.push(phrase);
         seen.add(phrase.toLowerCase());
       }
@@ -655,28 +698,39 @@ export function generateLongTailKeywords(
 
 /**
  * TASK 3: Filter out spam and low-value keywords
- * Removes subjective adjectives, generic terms, and non-buyer-intent keywords
+ * Removes subjective adjectives, generic terms, and non-buyer-intent keywords - TASK 7 ENHANCED
  */
 export function filterSpamKeywords(keywords: string[]): string[] {
   if (!keywords || keywords.length === 0) return [];
   
   return keywords.filter(kw => {
     const lowerKw = kw.toLowerCase().trim();
+    const wordCount = lowerKw.split(/\s+/).length;
     
-    // Check against expanded spam blacklist
+    // Check against expanded spam blacklist - TASK 2 ENHANCED
     if (SPAM_KEYWORDS_BLACKLIST.some(spam => 
       lowerKw === spam || lowerKw.includes(spam)
     )) {
       return false;
     }
     
+    // Filter out weak adjectives as standalone keywords - TASK 7 ENHANCED
+    if (WEAK_ADJECTIVE_BLACKLIST.includes(lowerKw) && wordCount === 1) {
+      return false;
+    }
+    
     // Filter out overly generic single words (unless they're specific objects)
-    if (lowerKw.length <= 4 && lowerKw.split(' ').length === 1) {
+    if (lowerKw.length <= 4 && wordCount === 1) {
       // Allow specific short words that could be objects
-      const allowedShortWords = ['3d', '4k', 'hd', 'ui', 'ux', 'app', 'web', 'seo', 'pdf'];
+      const allowedShortWords = ['3d', '4k', 'hd', 'ui', 'ux', 'app', 'web', 'seo', 'pdf', 'ai', 'vr', 'ar'];
       if (!allowedShortWords.includes(lowerKw)) {
         return false;
       }
+    }
+    
+    // Filter out keywords longer than 5 words - TASK 3 ENHANCED
+    if (wordCount > 5) {
+      return false;
     }
     
     return true;
