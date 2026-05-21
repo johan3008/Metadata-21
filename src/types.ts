@@ -35,7 +35,7 @@ export interface QueueItem {
   settings: ItemSettings;
 }
 
-export type AuthProvider = 'gemini' | 'groq' | 'helper';
+export type AuthProvider = 'gemini' | 'groq' | 'mistral' | 'helper';
 
 export interface TargetPlatforms {
   shutterstock: boolean;

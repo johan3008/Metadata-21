@@ -217,6 +217,101 @@ async function startServer() {
     }
   });
 
+  // API Proxy Route for Mistral
+  app.post("/api/proxy/mistral", async (req: express.Request, res: express.Response) => {
+    const { key, payload } = req.body;
+    const apiKey = String(key || "").trim();
+    
+    console.log(`[PROXY] Mistral Request: model=${payload?.model || "default"}, hasKey=${!!apiKey}`);
+    
+    if (!apiKey) {
+      return res.status(400).json({ error: { message: "API Key Mistral kosong atau tidak valid" } });
+    }
+
+    if (apiKey.length < 10) {
+      return res.status(400).json({ error: { message: "Format API Key Mistral terlalu pendek / tidak sahih" } });
+    }
+
+    try {
+      const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      console.log(`[PROXY] Mistral Downstream Status: ${response.status}`);
+      
+      let rawText = "";
+      try {
+        rawText = await response.text();
+      } catch (e) {
+         rawText = "";
+      }
+
+      let data: any = {};
+      let parseOk = false;
+      if (rawText) {
+        try {
+          data = JSON.parse(rawText);
+          parseOk = true;
+        } catch (_) {
+          // Non-JSON response
+        }
+      }
+      
+      if (!response.ok) {
+        console.error("[PROXY] Mistral Downstream Error Response Status:", response.status);
+        if (parseOk) {
+          console.error("[PROXY] parsed error:", JSON.stringify(data));
+        } else {
+          console.error("[PROXY] raw error text:", rawText);
+        }
+
+        let errMsg = "Terjadi kesalahan pada Mistral AI API";
+        if (data?.error?.message) {
+          errMsg = data.error.message;
+        } else if (typeof data?.error === "string") {
+          errMsg = data.error;
+        } else if (rawText) {
+          errMsg = rawText.slice(0, 300);
+        } else {
+          errMsg = `HTTP Error Code: ${response.status}`;
+        }
+
+        // Map typical Mistral HTTP status codes to helpful Indonesian troubleshooting steps
+        if (response.status === 401 || response.status === 403) {
+          errMsg = `API Key Mistral tidak valid atau Kedaluwarsa. Mohon masukkan Kunci Mistral yang valid dari dashboard Mistral AI!`;
+        } else if (response.status === 404) {
+          errMsg = `Model Mistral "${payload?.model || 'default'}" atau endpoint tidak ditemukan (404 Not Found). Silakan pastikan model aktif terpilih!`;
+        } else if (response.status === 429) {
+          errMsg = `Batas Kuota Mistral Terlampaui (429 Rate Limit): ${errMsg}. Silakan tunggu sebentar atau ganti kunci!`;
+        }
+
+        return res.status(response.status).json({
+          error: {
+            message: errMsg,
+            raw: data?.error || data || rawText
+          }
+        });
+      }
+
+      if (parseOk) {
+        return res.status(200).json(data);
+      } else {
+        return res.status(200).json({ customText: rawText });
+      }
+
+    } catch (error: any) {
+      console.error("[PROXY] Mistral Network Error:", error);
+      return res.status(500).json({ 
+        error: { message: `Koneksi Jaringan Gagal: ${error?.message || "Internal server error"}` } 
+      });
+    }
+  });
+
   // API Route for generateMetadata
   app.post("/api/generate-metadata", async (req: express.Request, res: express.Response) => {
     const { imageDescription } = req.body;

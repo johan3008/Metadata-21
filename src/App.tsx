@@ -55,6 +55,12 @@ import {
   sanitizeKeywords,
   applyUserPreferences
 } from './utils';
+import { 
+  MISTRAL_MODELS, 
+  testMistralApiKey, 
+  generateMetadataWithMistral,
+  performMistralCall 
+} from './services/mistral';
 
 export default function App() {
   // Application states
@@ -67,6 +73,7 @@ export default function App() {
   // API key states (5 slots each for token rotation)
   const [geminiKeys, setGeminiKeys] = useState<string[]>(['', '', '', '', '']);
   const [groqKeys, setGroqKeys] = useState<string[]>(['', '', '', '', '']);
+  const [mistralKeys, setMistralKeys] = useState<string[]>(['', '', '', '', '']);
   
   // Selected Models for each engine
   const [selectedGeminiModels, setSelectedGeminiModels] = useState<Record<string, boolean>>({
@@ -80,6 +87,11 @@ export default function App() {
     'llama-3.1-8b-instant': true,
     'meta-llama/llama-4-scout-17b-16e-instruct': false,
   });
+
+  const [selectedMistralModel, setSelectedMistralModel] = useState<string>('mistral-small-4');
+
+  // AI Provider selection: 'gemini' | 'groq' | 'mistral' | 'auto'
+  const [aiProviderSelection, setAiProviderSelection] = useState<'gemini' | 'groq' | 'mistral' | 'auto'>('auto');
 
   // Toggles & Customization State
   const [speed3x, setSpeed3x] = useState<boolean>(true);
@@ -105,16 +117,20 @@ export default function App() {
   // Queue Vault & Accordeons Visibility
   const [isGeminiVaultOpen, setIsGeminiVaultOpen] = useState<boolean>(false);
   const [isGroqVaultOpen, setIsGroqVaultOpen] = useState<boolean>(false);
+  const [isMistralVaultOpen, setIsMistralVaultOpen] = useState<boolean>(false);
 
   // Connection diagnostics states
   const [testGeminiMsg, setTestGeminiMsg] = useState<string>('Belum diuji');
   const [testGeminiStatus, setTestGeminiStatus] = useState<'idle' | 'testing' | 'success' | 'err'>('idle');
   const [testGroqMsg, setTestGroqMsg] = useState<string>('Belum diuji');
   const [testGroqStatus, setTestGroqStatus] = useState<'idle' | 'testing' | 'success' | 'err'>('idle');
+  const [testMistralMsg, setTestMistralMsg] = useState<string>('Belum diuji');
+  const [testMistralStatus, setTestMistralStatus] = useState<'idle' | 'testing' | 'success' | 'err'>('idle');
 
   // Multi-model detailed diagnostics
   const [geminiDiagnostics, setGeminiDiagnostics] = useState<Record<number, Record<string, { status: 'pending' | 'testing' | 'success' | 'rate_limit' | 'not_supported' | 'error'; message: string }>>>({});
   const [groqDiagnostics, setGroqDiagnostics] = useState<Record<number, Record<string, { status: 'pending' | 'testing' | 'success' | 'rate_limit' | 'not_supported' | 'error'; message: string }>>>({});
+  const [mistralDiagnostics, setMistralDiagnostics] = useState<Record<number, Record<string, { status: 'pending' | 'testing' | 'success' | 'rate_limit' | 'not_supported' | 'error'; message: string }>>>({});
 
   // Loading & Progress metrics
   const [isProcessingAll, setIsProcessingAll] = useState<boolean>(false);
@@ -151,12 +167,23 @@ export default function App() {
     }
     setGroqKeys(loadedGroq);
 
+    const loadedMistral = [...mistralKeys];
+    for (let i = 1; i <= 5; i++) {
+      const key = localStorage.getItem(`shophub_mistral_key_${i}`);
+      if (key) {
+        loadedMistral[i - 1] = key;
+      }
+    }
+    setMistralKeys(loadedMistral);
+
     // Auto open API Vaults if keys exist
     const hasGemini = loadedGemini.some(k => k.trim().length > 5);
     const hasGroq = loadedGroq.some(k => k.trim().length > 5);
+    const hasMistral = loadedMistral.some(k => k.trim().length > 5);
 
     if (hasGemini) setIsGeminiVaultOpen(true);
     if (hasGroq) setIsGroqVaultOpen(true);
+    if (hasMistral) setIsMistralVaultOpen(true);
 
     if (hasGroq && !hasGemini) {
       setActiveAuthProvider('groq');
@@ -176,6 +203,13 @@ export default function App() {
     updated[index] = val.trim();
     setGroqKeys(updated);
     localStorage.setItem(`shophub_groq_key_${index + 1}`, val.trim());
+  };
+
+  const handleMistralKeyChange = (index: number, val: string) => {
+    const updated = [...mistralKeys];
+    updated[index] = val.trim();
+    setMistralKeys(updated);
+    localStorage.setItem(`shophub_mistral_key_${index + 1}`, val.trim());
   };
 
   // Toggle checklist platform
@@ -573,6 +607,128 @@ export default function App() {
     } else {
       setTestGroqStatus('err');
       setTestGroqMsg('❌ Koneksi Groq gagal. Sila cek rincian di bawah.');
+    }
+  };
+
+  // Connection testing - Mistral
+  const testMistralConn = async () => {
+    const keysToTest: { key: string; index: number }[] = [];
+    mistralKeys.forEach((k, idx) => {
+      if (k.trim().length > 5) {
+        keysToTest.push({ key: k.trim(), index: idx });
+      }
+    });
+
+    if (keysToTest.length === 0) {
+      setTestMistralStatus('err');
+      setTestMistralMsg('❌ Kode Kosong. Mohon masukkan minimal satu API Key Mistral aktif!');
+      return;
+    }
+
+    setTestMistralStatus('testing');
+    setTestMistralMsg(`⏳ Menguji ${keysToTest.length} Kunci Mistral...`);
+
+    // Initialize diagnostics
+    const initialDiagnostics: Record<number, Record<string, { status: 'pending' | 'testing' | 'success' | 'rate_limit' | 'not_supported' | 'error'; message: string }>> = {};
+    keysToTest.forEach(({ index }) => {
+      initialDiagnostics[index] = {};
+      MISTRAL_MODELS.forEach(model => {
+        initialDiagnostics[index][model] = { status: 'pending', message: 'Antre...' };
+      });
+    });
+    setMistralDiagnostics(initialDiagnostics);
+
+    let anySuccess = false;
+    let anyRateLimit = false;
+
+    for (const { key, index } of keysToTest) {
+      let isKeyCompletelyInvalid = false;
+
+      for (const model of MISTRAL_MODELS) {
+        if (isKeyCompletelyInvalid) {
+          setMistralDiagnostics(prev => ({
+            ...prev,
+            [index]: {
+              ...prev[index],
+              [model]: { status: 'error', message: 'Gagal (Sandi salah)' }
+            }
+          }));
+          continue;
+        }
+
+        setMistralDiagnostics(prev => ({
+          ...prev,
+          [index]: {
+            ...prev[index],
+            [model]: { status: 'testing', message: 'Memeriksa...' }
+          }
+        }));
+
+        try {
+          const result = await testMistralApiKey(key);
+
+          if (result.valid) {
+            anySuccess = true;
+            setMistralDiagnostics(prev => ({
+              ...prev,
+              [index]: {
+                ...prev[index],
+                [model]: { status: 'success', message: '✅ Aktif' }
+              }
+            }));
+          } else {
+            const errMsg = result.error || '';
+            if (errMsg.includes('429') || errMsg.includes('Rate Limit')) {
+              anyRateLimit = true;
+              setMistralDiagnostics(prev => ({
+                ...prev,
+                [index]: {
+                  ...prev[index],
+                  [model]: { status: 'rate_limit', message: '⚠️ Limit (429)' }
+                }
+              }));
+            } else if (errMsg.includes('tidak valid') || errMsg.includes('401') || errMsg.includes('403')) {
+              isKeyCompletelyInvalid = true;
+              setMistralDiagnostics(prev => ({
+                ...prev,
+                [index]: {
+                  ...prev[index],
+                  [model]: { status: 'error', message: '❌ Kunci Salah' }
+                }
+              }));
+            } else {
+              setMistralDiagnostics(prev => ({
+                ...prev,
+                [index]: {
+                  ...prev[index],
+                  [model]: { status: 'error', message: `❌ ${errMsg.slice(0, 30)}` }
+                }
+              }));
+            }
+          }
+        } catch (e: any) {
+          setMistralDiagnostics(prev => ({
+            ...prev,
+            [index]: {
+              ...prev[index],
+              [model]: { status: 'error', message: '❌ Jaringan' }
+            }
+          }));
+        }
+
+        await new Promise(r => setTimeout(r, 150));
+      }
+    }
+
+    if (anySuccess) {
+      setTestMistralStatus('success');
+      setTestMistralMsg('✅ Selesai menguji! API Key Mistral aktif dan siap digunakan.');
+    } else if (anyRateLimit) {
+      setTestMistralStatus('err');
+      setTestMistralMsg('⚠️ Kunci Mistral valid tetapi kuota habis (429 Rate Limit). Mohon tunggu semenit.');
+    } else {
+      setTestMistralStatus('err');
+      setTestMistralMsg('❌ Koneksi Mistral gagal. Sila cek rincian di bawah.');
     }
   };
 
@@ -1120,6 +1276,67 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
     throw new Error(lastError || "Semua model & kunci API Groq gagal merespons.");
   };
 
+  // Direct fetch to Mistral API Model
+  const fetchMistralDirect = async (item: QueueItem, systemPrompt: string, userPrompt: string): Promise<string> => {
+    const activeKeys = getActiveKeys('mistral' as any);
+    if (activeKeys.length === 0) {
+      throw new Error("Mohon masukkan minimal 1 API Key Mistral di tab!");
+    }
+
+    const model = selectedMistralModel;
+    let lastError = "";
+    const maxAttempts = activeKeys.length * 3; // 3 retries per key
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const testKeyIndex = attempt % activeKeys.length;
+      const key = activeKeys[testKeyIndex];
+
+      try {
+        console.log('Using Mistral Model:', model);
+        
+        const response = await performMistralCall({
+          model,
+          key,
+          payload: {
+            model,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt }
+            ],
+            temperature: 0.4,
+            max_tokens: 1200,
+            response_format: { type: 'json_object' }
+          }
+        }, isUsingClientFallback);
+
+        if (response.ok) {
+          const data = await response.json();
+          const rawText = (data.choices?.[0]?.message?.content || '').trim();
+          if (rawText) {
+            console.log('Mistral API Connected');
+            return rawText;
+          }
+        } else {
+          const errBody = await response.json().catch(() => ({}));
+          const errMsg = errBody?.error?.message || response.statusText;
+
+          if (response.status === 429 || errMsg.includes("rate limit")) {
+            lastError = `Mistral [${model}] Kunci #${testKeyIndex + 1}: Rate Limit. Menunggu antrean...`;
+            await new Promise(r => setTimeout(r, 1000));
+          } else {
+            lastError = `Mistral [${model}] Kunci #${testKeyIndex + 1}: ${errMsg}`;
+          }
+        }
+      } catch (e: any) {
+        lastError = `Mistral [${model}] Kunci #${testKeyIndex + 1}: ${e.message || 'Network Fail'}`;
+      }
+
+      await new Promise(r => setTimeout(r, speed3x ? 50 : 200));
+    }
+
+    throw new Error(lastError || "Semua kunci API Mistral gagal merespons.");
+  };
+
   // Process single metadata generation
   const processSingle = async (itemId: string) => {
     // Locate element
@@ -1134,12 +1351,20 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
 
     try {
       let resultText = "";
-      if (activeAuthProvider === 'gemini') {
+      
+      // Determine which provider to use based on selection
+      const providerToUse = aiProviderSelection === 'auto' 
+        ? (activeAuthProvider === 'gemini' ? 'gemini' : 'groq')
+        : aiProviderSelection;
+
+      if (providerToUse === 'gemini') {
         resultText = await fetchGeminiDirect(queueItem, sysPrompt, userPrompt);
-      } else if (activeAuthProvider === 'groq') {
+      } else if (providerToUse === 'groq') {
         resultText = await fetchGroqDirect(queueItem, sysPrompt, userPrompt);
+      } else if (providerToUse === 'mistral') {
+        resultText = await fetchMistralDirect(queueItem, sysPrompt, userPrompt);
       } else {
-        throw new Error("Pilih provider koneksi (Gemini / Groq) terlebih dahulu!");
+        throw new Error("Pilih provider koneksi (Gemini / Groq / Mistral) terlebih dahulu!");
       }
 
       // JSON Extractor
