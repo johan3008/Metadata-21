@@ -915,17 +915,26 @@ export default function App() {
     const maxD = Math.ceil(item.settings.descLength * 1.2);
     const kwTarget = item.settings.keywordsCount;
 
-    // Dynamic output rules based on user preferences
-    const dynamicRules = `
+      // Dynamic output rules based on user preferences - TASK 9 ENHANCED
+      const dynamicRules = `
 OUTPUT RULES (WAJIB DIPATUHI):
 - Maximum title length: ${item.settings.titleLength} characters (HARD LIMIT)
 - Generate exactly ${kwTarget} keywords (NO MORE, NO LESS)
 - Maximum description length: ${item.settings.descLength} characters (HARD LIMIT)
 - Prioritize SEO-friendly commercial keywords
-- First 10 keywords must be highest search intent
-- Avoid spam keywords: beautiful, awesome, cool, nice, amazing, best quality, ultra hd, masterpiece
-- Keywords must be single words or two-word phrases only
-- No technical specs like 4k, 8k, resolution, camera brand names
+
+IMPORTANT SEO RULES:
+- First 10 keywords must be highest search intent.
+- Prioritize long-tail keywords.
+- Avoid generic keywords like: food, delicious, aesthetic, tasty, yummy, beautiful, awesome, cool, nice, amazing.
+- Avoid spam keywords: beautiful, awesome, cool, nice, amazing, best quality, ultra hd, masterpiece, high quality, premium, luxury.
+- Keywords must be single words or two-word phrases only.
+- No technical specs like 4k, 8k, resolution, camera brand names.
+- Use commercial buyer intent keywords.
+- Only generate visually relevant keywords.
+- Do not generate broad generic tags.
+- Use Adobe Stock SEO structure.
+- Prioritize searchable phrases over artistic wording.
 `;
 
     let specificGuides = "";
