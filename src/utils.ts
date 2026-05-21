@@ -523,6 +523,280 @@ const WEAK_ADJECTIVE_BLACKLIST = [
   'relatively', 'comparatively', 'approximately', 'roughly', 'about'
 ];
 
+// AI Generic Tags to auto-remove - TASK 3 ENHANCED
+const AI_GENERIC_TAGS_BLACKLIST = [
+  'lifestyle', 'scenic', 'serene', 'environment', 'concept',
+  'beautiful', 'adorable', 'minimal', 'composition', 'botanical',
+  'growth', 'aesthetic', 'artistic', 'dreamy', 'magical',
+  'ethereal', 'mystical', 'romantic', 'nostalgic', 'sentimental',
+  'emotional', 'dramatic', 'intense', 'powerful', 'strong',
+  'weak', 'soft', 'hard', 'rough', 'smooth', 'warm', 'cold',
+  'hot', 'fresh', 'old', 'new', 'young', 'happy', 'sad',
+  'angry', 'calm', 'peaceful', 'quiet', 'loud', 'busy', 'empty',
+  'full', 'rich', 'poor', 'big', 'small', 'large', 'tiny',
+  'huge', 'massive', 'little', 'good', 'bad', 'fine', 'okay',
+  'lovely', 'handsome', 'ugly', 'complex', 'easy', 'difficult',
+  'vibrant', 'lively', 'sophisticated', 'chic', 'perfect',
+  'flawless', 'impeccable', 'pristine', 'premium', 'luxury',
+  'exclusive', 'unique', 'special', 'rare', 'precious', 'valuable',
+  'priceless', 'irreplaceable', 'innovative', 'revolutionary',
+  'groundbreaking', 'cutting-edge', 'state-of-the-art', 'advanced',
+  'professional', 'creative', 'generic', 'standard', 'common',
+  'ordinary', 'typical', 'regular', 'normal', 'average'
+];
+
+// Allowed multi-word commercial phrases (2 words max) - TASK 1 ENHANCED
+const ALLOWED_MULTI_WORD_PHRASES = [
+  'white background',
+  'copy space',
+  'flat lay',
+  'top view',
+  'overhead view',
+  'isolated background',
+  'studio shot',
+  'product shot',
+  'commercial use',
+  'advertising campaign',
+  'social media',
+  'web banner',
+  'print media',
+  'marketing material',
+  'brand identity',
+  'logo design',
+  'packaging design',
+  'label design',
+  'poster design',
+  'flyer design',
+  'brochure design',
+  'business card',
+  'letter head',
+  'email template',
+  'website header',
+  'hero image',
+  'background image',
+  'wallpaper design',
+  'pattern design',
+  'texture background',
+  'gradient background',
+  'solid color',
+  'pastel color',
+  'neon color',
+  'metallic finish',
+  'glossy finish',
+  'matte finish',
+  'high key',
+  'low key',
+  'depth of field',
+  'bokeh effect',
+  'motion blur',
+  'long exposure',
+  'time lapse',
+  'slow motion',
+  'stop motion',
+  '3d render',
+  'vector art',
+  'line art',
+  'watercolor style',
+  'oil painting',
+  'digital art',
+  'mixed media',
+  'collage art',
+  'pop art',
+  'street art',
+  'graffiti art',
+  'urban art',
+  'abstract art',
+  'geometric pattern',
+  'organic shape',
+  'natural light',
+  'artificial light',
+  'soft light',
+  'hard light',
+  'back light',
+  'side light',
+  'front light',
+  'ring light',
+  'golden hour',
+  'blue hour',
+  'night shot',
+  'day shot',
+  'indoor shot',
+  'outdoor shot',
+  'close up',
+  'wide angle',
+  'macro shot',
+  'portrait orientation',
+  'landscape orientation',
+  'square format',
+  'panoramic view',
+  'aerial view',
+  'bird eye view',
+  'worm eye view',
+  'eye level',
+  'low angle',
+  'high angle',
+  'dutch angle',
+  'straight on',
+  'side view',
+  'front view',
+  'back view',
+  'three quarter',
+  'full body',
+  'head shot',
+  'waist up',
+  'knee up',
+  'full length'
+];
+
+/**
+ * TASK 1: TRUE SINGLE KEYWORD MODE - Enforce pure single keyword format
+ * Splits compound phrases, removes AI filler, keeps only visual objects
+ * 
+ * RULES:
+ * - Max 1 word per keyword (strict mode)
+ * - Optional 2 words ONLY for allowed commercial phrases
+ * - Auto-split all other compound phrases
+ * - Remove semantic stacking and composition spam
+ */
+export function enforcePureSingleKeywordMode(
+  keywords: string[],
+  strictMode: boolean = true
+): string[] {
+  if (!keywords || keywords.length === 0) return [];
+  
+  const result: string[] = [];
+  const seenLower = new Set<string>();
+  
+  for (const keyword of keywords) {
+    if (!keyword || typeof keyword !== 'string') continue;
+    
+    const trimmedKw = keyword.trim().toLowerCase();
+    
+    // Skip empty or too short
+    if (trimmedKw.length < 2) continue;
+    
+    // Split into individual words
+    const words = trimmedKw.split(/\s+/).filter(w => w.length > 0);
+    
+    if (words.length === 0) continue;
+    
+    // Check if this is an allowed multi-word phrase
+    const isAllowedPhrase = ALLOWED_MULTI_WORD_PHRASES.some(phrase => 
+      trimmedKw === phrase.toLowerCase()
+    );
+    
+    if (isAllowedPhrase && words.length <= 2) {
+      // Keep allowed 2-word commercial phrases
+      if (!seenLower.has(trimmedKw)) {
+        result.push(trimmedKw);
+        seenLower.add(trimmedKw);
+      }
+      continue;
+    }
+    
+    // For strict mode or non-allowed phrases, split into single words
+    if (strictMode || words.length > 2) {
+      // Process each word individually
+      for (const word of words) {
+        // Skip weak adjectives
+        if (WEAK_ADJECTIVE_BLACKLIST.includes(word)) continue;
+        
+        // Skip AI generic tags
+        if (AI_GENERIC_TAGS_BLACKLIST.includes(word)) continue;
+        
+        // Skip if already seen
+        if (seenLower.has(word)) continue;
+        
+        // Validate single word
+        if (word.length >= 2 && word.length <= 30) {
+          result.push(word);
+          seenLower.add(word);
+        }
+      }
+    } else {
+      // Non-strict mode: keep 2-word phrases if not in blacklist
+      const hasBlacklistedWord = words.some(word => 
+        WEAK_ADJECTIVE_BLACKLIST.includes(word) || 
+        AI_GENERIC_TAGS_BLACKLIST.includes(word)
+      );
+      
+      if (!hasBlacklistedWord && !seenLower.has(trimmedKw)) {
+        result.push(trimmedKw);
+        seenLower.add(trimmedKw);
+      }
+    }
+  }
+  
+  return result;
+}
+
+/**
+ * TASK 2: Remove compound phrase keywords
+ * Auto-removes repetitive phrases, composition spam, semantic stacking
+ */
+export function removeCompoundPhrases(keywords: string[]): string[] {
+  if (!keywords || keywords.length === 0) return [];
+  
+  const COMPOSITION_SPAM_PATTERNS = [
+    'flat lay', 'top view', 'overhead', 'minimal', 'composition',
+    'scenic', 'aesthetic', 'botanical', 'growth', 'lifestyle'
+  ];
+  
+  return keywords.filter(kw => {
+    const lowerKw = kw.toLowerCase().trim();
+    const wordCount = lowerKw.split(/\s+/).length;
+    
+    // Remove if more than 2 words (except allowed phrases)
+    if (wordCount > 2) {
+      return ALLOWED_MULTI_WORD_PHRASES.some(phrase => 
+        lowerKw === phrase
+      );
+    }
+    
+    // Remove repetitive compound patterns like "rabbit flat lay", "rabbit top view"
+    if (wordCount === 2) {
+      const words = lowerKw.split(/\s+/);
+      // If second word is a composition modifier, check if it's necessary
+      if (COMPOSITION_SPAM_PATTERNS.some(pattern => words[1] === pattern)) {
+        // Only keep if it's an allowed phrase
+        return ALLOWED_MULTI_WORD_PHRASES.some(phrase => lowerKw === phrase);
+      }
+    }
+    
+    return true;
+  });
+}
+
+/**
+ * TASK 3: Remove AI generic tags from keywords
+ * Auto-filters subjective, aesthetic, and non-visual keywords
+ */
+export function removeAIGenericTags(keywords: string[]): string[] {
+  if (!keywords || keywords.length === 0) return [];
+  
+  return keywords.filter(kw => {
+    const lowerKw = kw.toLowerCase().trim();
+    
+    // Exact match blacklist
+    if (AI_GENERIC_TAGS_BLACKLIST.includes(lowerKw)) {
+      return false;
+    }
+    
+    // Check if keyword contains blacklisted terms
+    if (AI_GENERIC_TAGS_BLACKLIST.some(tag => lowerKw.includes(tag))) {
+      // Exception: allow if it's part of an allowed phrase
+      const isAllowedPhrase = ALLOWED_MULTI_WORD_PHRASES.some(phrase => 
+        lowerKw === phrase
+      );
+      if (!isAllowedPhrase) {
+        return false;
+      }
+    }
+    
+    return true;
+  });
+}
+
 /**
  * TASK 1: Normalize keyword phrase - split repeated tokens, remove duplicated words, remove phrase looping
  */
@@ -899,9 +1173,15 @@ export function enforceTop10Keywords(
 /**
  * TASK 6: Sanitize keywords for microstock compliance with enhanced SEO optimization
  * Complete pipeline: clean -> normalize -> filter spam -> remove duplicates -> semantic dedupe -> sort by SEO -> enforce top 10
+ * 
+ * TRUE SINGLE KEYWORD MODE PIPELINE:
+ * - Enforce pure single keyword format
+ * - Remove compound phrases
+ * - Remove AI generic tags
+ * - Split multi-word phrases (except allowed commercial phrases)
  */
 export function sanitizeKeywords(
-  keywords: string[], 
+  keywords: string[],
   maxCount: number = 35,
   visualContext?: {
     mainObjects?: string[];
@@ -910,7 +1190,7 @@ export function sanitizeKeywords(
   }
 ): string[] {
   if (!keywords || keywords.length === 0) return [];
-  
+
   // Forbidden technical/medium indicators for microstock 2026
   const FORBIDDEN_TERMS = [
     '4k', '8k', 'hd', 'uhd', 'hdr', 'resolution', 'megapixel', 'mp',
@@ -920,7 +1200,7 @@ export function sanitizeKeywords(
     'ultra', 'high quality', 'best quality', 'masterpiece', 'render', '3d render',
     'file', 'download', 'free', 'sample', 'preview', 'watermark'
   ];
-  
+
   // Step 1: Clean and normalize each keyword - TASK 1 & 5
   let cleaned = keywords
     .map(kw => String(kw))
@@ -929,52 +1209,63 @@ export function sanitizeKeywords(
     .map(kw => kw.toLowerCase())
     .map(kw => kw.replace(/\s+/g, ' '))
     .filter(kw => kw.length >= 2 && kw.length <= 50);
-  
+
   // Step 2: Remove forbidden terms
   cleaned = cleaned.filter(kw => {
     return !FORBIDDEN_TERMS.some(term =>
       kw === term || kw.includes(term)
     );
   });
-  
+
   // Step 3: Filter spam keywords using expanded blacklist
   cleaned = filterSpamKeywords(cleaned);
-  
-  // Step 4: Normalize keyword phrases - remove looping and repeated words (TASK 1)
+
+  // Step 4: Remove AI generic tags - TASK 3 ENHANCED
+  cleaned = removeAIGenericTags(cleaned);
+
+  // Step 5: Enforce pure single keyword mode - TASK 1 ENHANCED
+  cleaned = enforcePureSingleKeywordMode(cleaned, true);
+
+  // Step 6: Remove compound phrases - TASK 2 ENHANCED
+  cleaned = removeCompoundPhrases(cleaned);
+
+  // Step 7: Normalize keyword phrases - remove looping and repeated words (TASK 1)
   cleaned = cleaned.flatMap(kw => normalizeKeywordPhrase(kw));
-  
-  // Step 5: Remove exact duplicates (case-insensitive)
+
+  // Step 8: Remove exact duplicates (case-insensitive)
   cleaned = Array.from(
     new Map(cleaned.map(kw => [kw.toLowerCase(), kw])).values()
   );
-  
-  // Step 6: Remove semantic duplicates (TASK 2)
+
+  // Step 9: Remove semantic duplicates (TASK 2)
   cleaned = removeSemanticDuplicates(cleaned);
-  
-  // Step 7: Generate long-tail variations and add them
+
+  // Step 10: Generate long-tail variations and add them (filtered through single keyword mode)
   const longTail = generateLongTailKeywords(cleaned, visualContext ? {
     mainObject: visualContext.mainObjects?.[0],
     commercialUse: ['copy space', 'background', 'template'],
     composition: visualContext.composition
   } : undefined, 10);
-  
-  cleaned = [...cleaned, ...longTail];
-  
-  // Step 8: Remove duplicates again after long-tail generation
+
+  // Apply single keyword mode to long-tail as well
+  const longTailCleaned = enforcePureSingleKeywordMode(longTail, true);
+  cleaned = [...cleaned, ...longTailCleaned];
+
+  // Step 11: Remove duplicates again after long-tail generation
   cleaned = Array.from(
     new Map(cleaned.map(kw => [kw.toLowerCase(), kw])).values()
   );
-  
-  // Step 9: Remove semantic duplicates again after long-tail generation
+
+  // Step 12: Remove semantic duplicates again after long-tail generation
   cleaned = removeSemanticDuplicates(cleaned);
-  
-  // Step 10: Sort by SEO value with visual context
+
+  // Step 13: Sort by SEO value with visual context
   cleaned = sortKeywordsBySEO(cleaned, visualContext);
-  
-  // Step 11: Enforce top 10 keywords for highest search intent
+
+  // Step 14: Enforce top 10 keywords for highest search intent
   cleaned = enforceTop10Keywords(cleaned, visualContext, maxCount);
-  
-  // Step 12: Limit to max count
+
+  // Step 15: Limit to max count
   return cleaned.slice(0, maxCount);
 }
 
