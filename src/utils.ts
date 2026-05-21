@@ -538,6 +538,212 @@ export const COMPLIANCE_PROMPT_INSTRUCTIONS = `COMPLIANCE RULES - MANDATORY FOR 
 // =========================================
 
 // Commercial keywords with high buyer intent (priority order)
+// =========================================
+// HARD ENFORCEMENT SYSTEM - TASK 1 TO TASK 10
+// Process Final Metadata After AI Response
+// =========================================
+
+/**
+ * TASK 1: HARD ENFORCEMENT SYSTEM - Process Final Metadata After AI Response
+ */
+export interface ProcessFinalMetadataInput {
+  metadata: {
+    title: string;
+    description: string;
+    keywords: string[];
+    categories?: Record<string, string>;
+  };
+  visionAnalysis?: {
+    detectedObjects?: string[];
+    detectedActions?: string[];
+    sceneDescription?: string;
+  };
+  settings: {
+    titleLength?: number;
+    descLength?: number;
+    keywordsCount?: number;
+    keyConcepts?: string;
+  };
+}
+
+export function processFinalMetadata(input: ProcessFinalMetadataInput): {
+  title: string;
+  description: string;
+  keywords: string[];
+  categories?: Record<string, string>;
+} {
+  const { metadata, visionAnalysis, settings } = input;
+  
+  const structure = generateMetadataStructure(
+    visionAnalysis?.sceneDescription || metadata.description || metadata.title,
+    visionAnalysis?.detectedObjects,
+    visionAnalysis?.detectedActions
+  );
+  
+  const validObjects = extractValidObjects(structure.objects, metadata.title);
+  const validFlow = extractValidFlow(structure.flow, metadata.title);
+  const validConcepts = extractValidConcepts(structure.concepts, metadata.title);
+  
+  let allKeywords = [...validObjects, ...validFlow, ...validConcepts, ...metadata.keywords];
+  allKeywords = removeCompositionSpam(allKeywords, visionAnalysis);
+  allKeywords = removeWeakKeywords(allKeywords);
+  allKeywords = enforcePureSingleKeywordMode(allKeywords, true);
+  allKeywords = validateVisualRelevance(allKeywords, {
+    title: metadata.title,
+    description: metadata.description,
+    detectedObjects: visionAnalysis?.detectedObjects
+  });
+  allKeywords = ensureTitleKeywordRelevance(allKeywords, metadata.title);
+  allKeywords = sortKeywordsBySEO(allKeywords, {
+    mainObjects: validObjects,
+    composition: [],
+    scene: visionAnalysis?.sceneDescription
+  });
+  allKeywords = enforceTop10Keywords(allKeywords, {
+    mainObjects: validObjects,
+    composition: [],
+    scene: visionAnalysis?.sceneDescription
+  }, settings.keywordsCount || 35);
+  
+  return applyUserPreferences({
+    title: metadata.title,
+    description: metadata.description,
+    keywords: allKeywords,
+    categories: metadata.categories
+  }, settings);
+}
+
+const COMMON_VISUAL_OBJECTS = [
+  'man', 'woman', 'person', 'people', 'child', 'boy', 'girl',
+  'table', 'desk', 'chair', 'laptop', 'computer', 'phone', 'smartphone',
+  'document', 'paper', 'book', 'pen', 'cup', 'glass', 'bottle',
+  'bag', 'box', 'building', 'office', 'room', 'window', 'door',
+  'tree', 'plant', 'flower', 'sky', 'car', 'vehicle', 'road',
+  'food', 'fruit', 'clothing', 'shoe', 'glasses', 'watch', 'animal'
+];
+
+function extractValidObjects(objects: string[], title: string): string[] {
+  const titleLower = title.toLowerCase();
+  return objects.filter(obj => {
+    const objLower = obj.toLowerCase();
+    return titleLower.includes(objLower) || COMMON_VISUAL_OBJECTS.some(c => objLower.includes(c));
+  });
+}
+
+function extractValidFlow(flow: string[], title: string): string[] {
+  const VALID_FLOW_KEYWORDS = [
+    'analysis', 'audit', 'reading', 'writing', 'meeting', 'planning',
+    'working', 'creating', 'calculating', 'searching', 'walking',
+    'sitting', 'standing', 'eating', 'drinking', 'shopping',
+    'exercising', 'relaxing', 'playing', 'traveling', 'painting',
+    'photographing', 'performing', 'discussing', 'presenting',
+    'examining', 'inspecting', 'verifying', 'reviewing', 'studying',
+    'teaching', 'learning', 'cooking', 'preparing', 'building',
+    'designing', 'developing', 'testing', 'measuring', 'exploring'
+  ];
+  const INVALID_FLOW_KEYWORDS = [
+    'beautiful', 'aesthetic', 'creative', 'artistic', 'scenic',
+    'gorgeous', 'stunning', 'amazing', 'wonderful', 'perfect'
+  ];
+  return flow.filter(action => {
+    const actionLower = action.toLowerCase();
+    if (!VALID_FLOW_KEYWORDS.includes(actionLower)) return false;
+    if (INVALID_FLOW_KEYWORDS.includes(actionLower)) return false;
+    return true;
+  });
+}
+
+function extractValidConcepts(concepts: string[], title: string): string[] {
+  const VALID_CONCEPT_KEYWORDS = [
+    'finance', 'accounting', 'compliance', 'management', 'strategy',
+    'marketing', 'sales', 'technology', 'innovation', 'communication',
+    'education', 'healthcare', 'environment', 'diversity', 'success',
+    'teamwork', 'productivity', 'security', 'data', 'quality',
+    'business', 'corporate', 'professional', 'commercial', 'industry',
+    'startup', 'entrepreneurship', 'investment', 'growth', 'development',
+    'research', 'science', 'engineering', 'manufacturing', 'logistics',
+    'retail', 'hospitality', 'tourism', 'entertainment', 'media',
+    'agriculture', 'construction', 'transportation', 'energy', 'utilities'
+  ];
+  return concepts.filter(concept => {
+    const conceptLower = concept.toLowerCase();
+    return VALID_CONCEPT_KEYWORDS.includes(conceptLower);
+  });
+}
+
+export function removeCompositionSpam(
+  keywords: string[],
+  visionAnalysis?: { detectedObjects?: string[]; detectedActions?: string[]; sceneDescription?: string; }
+): string[] {
+  const COMPOSITION_SPAM_LIST = [
+    'flat lay', 'top view', 'overhead', 'knolling',
+    'minimal composition', 'scenic', 'aesthetic', 'beautiful',
+    'creative', 'artistic', 'environment', 'concept',
+    'bird eye view', 'aerial view', 'drone shot',
+    'studio shot', 'product shot', 'lifestyle shot',
+    'composition', 'minimal', 'abstract composition'
+  ];
+  return keywords.filter(kw => {
+    const kwLower = kw.toLowerCase().trim();
+    const isSpam = COMPOSITION_SPAM_LIST.some(spam => kwLower === spam || kwLower.includes(spam));
+    if (isSpam) {
+      const sceneDesc = visionAnalysis?.sceneDescription?.toLowerCase() || '';
+      const hasVisualEvidence = COMPOSITION_SPAM_LIST.some(spam => sceneDesc.includes(spam));
+      if (!hasVisualEvidence) return false;
+    }
+    return true;
+  });
+}
+
+export function removeWeakKeywords(keywords: string[]): string[] {
+  const WEAK_KEYWORD_LIST = [
+    'adorable', 'awesome', 'cool', 'nice', 'amazing',
+    'bright', 'colorful', 'yummy', 'tasty', 'delicious',
+    'beautiful', 'gorgeous', 'stunning', 'wonderful',
+    'fantastic', 'great', 'good', 'fine', 'excellent',
+    'cute', 'lovely', 'pretty', 'charming', 'elegant',
+    'sophisticated', 'classy', 'stylish', 'trendy',
+    'fashionable', 'chic', 'perfect', 'flawless',
+    'premium', 'luxury', 'exclusive', 'unique',
+    'special', 'rare', 'precious', 'valuable',
+    'innovative', 'revolutionary', 'groundbreaking',
+    'cutting-edge', 'advanced', 'professional',
+    'creative', 'modern', 'contemporary', 'minimal',
+    'clean', 'simple', 'basic', 'generic', 'standard'
+  ];
+  return keywords.filter(kw => !WEAK_KEYWORD_LIST.includes(kw.toLowerCase().trim()));
+}
+
+export function validateVisualRelevance(
+  keywords: string[],
+  context: { title: string; description: string; detectedObjects?: string[]; }
+): string[] {
+  const textContext = `${context.title} ${context.description}`.toLowerCase();
+  const detectedObjLower = (context.detectedObjects || []).map(o => o.toLowerCase());
+  return keywords.filter(kw => {
+    const kwLower = kw.toLowerCase().trim();
+    const inText = textContext.includes(kwLower);
+    const inObjects = detectedObjLower.some(obj => obj === kwLower || obj.includes(kwLower) || kwLower.includes(obj));
+    return inText || inObjects;
+  });
+}
+
+export function ensureTitleKeywordRelevance(keywords: string[], title: string): string[] {
+  const titleWords = title.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 2);
+  const titleWordSet = new Set(titleWords);
+  const COMMERCIAL_ALLOWLIST = [
+    'business', 'corporate', 'professional', 'commercial',
+    'finance', 'technology', 'marketing', 'strategy',
+    'management', 'industry', 'company', 'office',
+    'white background', 'copy space', 'isolated'
+  ];
+  return keywords.filter(kw => {
+    const kwLower = kw.toLowerCase().trim();
+    const kwWords = kwLower.split(/\s+/);
+    const hasTitleMatch = kwWords.some(word => titleWordSet.has(word) || titleWordSet.has(word.substring(0, Math.min(word.length, 5))));
+    return hasTitleMatch || COMMERCIAL_ALLOWLIST.includes(kwLower);
+  });
+}
 // TASK 5: Composition keywords removed - only use when visually detected
 const COMMERCIAL_KEYWORDS = [
   'copy space',
