@@ -59,7 +59,13 @@ import {
   enforceCompliance,
   COMPLIANCE_PROMPT_INSTRUCTIONS,
   generateMetadataStructure,
-  MetadataStructure
+  MetadataStructure,
+  processFinalMetadata,
+  ProcessFinalMetadataInput,
+  removeCompositionSpam,
+  removeWeakKeywords,
+  validateVisualRelevance,
+  ensureTitleKeywordRelevance
 } from './utils';
 import { 
   MISTRAL_MODELS, 
@@ -1426,22 +1432,18 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
       // Step 1: Basic repair and structure normalization
       let normalizedMeta = repairParsedOutput(parsedObj, queueItem.settings, queueItem.name);
       
-      // Step 2: Apply SEO optimization layer
-      normalizedMeta.keywords = sanitizeKeywords(
-        normalizedMeta.keywords || [],
-        queueItem.settings.keywordsCount || 35
-      );
+      // Step 2: HARD ENFORCEMENT SYSTEM - Apply full metadata pipeline
+      const finalMetadata = processFinalMetadata({
+        metadata: normalizedMeta,
+        visionAnalysis: {
+          sceneDescription: queueItem.name,
+          detectedObjects: [],
+          detectedActions: []
+        },
+        settings: queueItem.settings
+      });
       
-      // Step 3: Apply microstock keyword optimization (sorting by commercial intent)
-      normalizedMeta.keywords = optimizeMicrostockKeywords(
-        normalizedMeta.keywords,
-        queueItem.settings.keywordsCount || 35
-      );
-      
-      // Step 4: Apply user preferences enforcement (title/desc length, keyword count, key concepts priority)
-      const finalMetadata = applyUserPreferences(normalizedMeta, queueItem.settings);
-      
-      // Step 5: Final category merge
+      // Step 3: Final category merge
       finalMetadata.categories = normalizedMeta.categories;
 
       setItems(prev => prev.map(i => {
@@ -1482,22 +1484,18 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
         // Step 1: Basic repair and structure normalization
         let normalizedMeta = repairParsedOutput(parsedObj, queueItem.settings, queueItem.name);
         
-        // Step 2: Apply SEO optimization layer
-        normalizedMeta.keywords = sanitizeKeywords(
-          normalizedMeta.keywords || [],
-          queueItem.settings.keywordsCount || 35
-        );
+        // Step 2: HARD ENFORCEMENT SYSTEM - Apply full metadata pipeline
+        const finalMetadata = processFinalMetadata({
+          metadata: normalizedMeta,
+          visionAnalysis: {
+            sceneDescription: queueItem.name,
+            detectedObjects: [],
+            detectedActions: []
+          },
+          settings: queueItem.settings
+        });
         
-        // Step 3: Apply microstock keyword optimization (sorting by commercial intent)
-        normalizedMeta.keywords = optimizeMicrostockKeywords(
-          normalizedMeta.keywords,
-          queueItem.settings.keywordsCount || 35
-        );
-        
-        // Step 4: Apply user preferences enforcement (title/desc length, keyword count, key concepts priority)
-        const finalMetadata = applyUserPreferences(normalizedMeta, queueItem.settings);
-        
-        // Step 5: Final category merge
+        // Step 3: Final category merge
         finalMetadata.categories = normalizedMeta.categories;
 
         setItems(prev => prev.map(i => i.id === itemId ? { ...i, status: 'success', metadata: finalMetadata } : i));
