@@ -15,19 +15,6 @@ export interface Metadata {
   };
 }
 
-export interface ComplianceResult {
-  complianceScore: number;
-  warnings: string[];
-  violationsFound: ComplianceViolation[];
-}
-
-export interface ComplianceViolation {
-  type: 'brand' | 'celebrity' | 'fictional' | 'artist' | 'style' | 'media' | 'news';
-  term: string;
-  field: 'title' | 'description' | 'keywords' | 'prompt';
-  severity: 'high' | 'medium' | 'low';
-}
-
 export interface ItemSettings {
   titleLength: number;
   descLength: number;
@@ -48,7 +35,7 @@ export interface QueueItem {
   settings: ItemSettings;
 }
 
-export type AuthProvider = 'gemini' | 'groq' | 'mistral' | 'helper';
+export type AuthProvider = 'gemini' | 'groq' | 'helper';
 
 export interface TargetPlatforms {
   shutterstock: boolean;

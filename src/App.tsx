@@ -31,7 +31,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import ThemeSwitcher from './components/ThemeSwitcher';
 
 // Import Types and Constants
-import { AssetType, QueueItem, AuthProvider, TargetPlatforms, Metadata, ComplianceResult } from './types';
+import { AssetType, QueueItem, AuthProvider, TargetPlatforms, Metadata } from './types';
 import { 
   BANNED_TRADEMARKS, 
   TRENDING_KEYWORDS, 
@@ -46,33 +46,8 @@ import {
   measureSEOQuality, 
   resizeAndCompressImage, 
   extractVideoFrames, 
-  generatePlatformCSV,
-  sanitizeMetadataOutput,
-  optimizeMicrostockKeywords,
-  truncateByCharacters,
-  truncateByWords,
-  filterSpamKeywords,
-  sanitizeKeywords,
-  applyUserPreferences,
-  scanComplianceViolations,
-  sanitizeComplianceMetadata,
-  enforceCompliance,
-  COMPLIANCE_PROMPT_INSTRUCTIONS,
-  generateMetadataStructure,
-  MetadataStructure,
-  processFinalMetadata,
-  ProcessFinalMetadataInput,
-  removeCompositionSpam,
-  removeWeakKeywords,
-  validateVisualRelevance,
-  ensureTitleKeywordRelevance
+  generatePlatformCSV 
 } from './utils';
-import { 
-  MISTRAL_MODELS, 
-  testMistralApiKey, 
-  generateMetadataWithMistral,
-  performMistralCall 
-} from './services/mistral';
 
 export default function App() {
   // Application states
@@ -85,7 +60,6 @@ export default function App() {
   // API key states (5 slots each for token rotation)
   const [geminiKeys, setGeminiKeys] = useState<string[]>(['', '', '', '', '']);
   const [groqKeys, setGroqKeys] = useState<string[]>(['', '', '', '', '']);
-  const [mistralKeys, setMistralKeys] = useState<string[]>(['', '', '', '', '']);
   
   // Selected Models for each engine
   const [selectedGeminiModels, setSelectedGeminiModels] = useState<Record<string, boolean>>({
@@ -99,11 +73,6 @@ export default function App() {
     'llama-3.1-8b-instant': true,
     'meta-llama/llama-4-scout-17b-16e-instruct': false,
   });
-
-  const [selectedMistralModel, setSelectedMistralModel] = useState<string>('mistral-small-4');
-
-  // AI Provider selection: 'gemini' | 'groq' | 'mistral' | 'auto'
-  const [aiProviderSelection, setAiProviderSelection] = useState<'gemini' | 'groq' | 'mistral' | 'auto'>('auto');
 
   // Toggles & Customization State
   const [speed3x, setSpeed3x] = useState<boolean>(true);
@@ -129,20 +98,16 @@ export default function App() {
   // Queue Vault & Accordeons Visibility
   const [isGeminiVaultOpen, setIsGeminiVaultOpen] = useState<boolean>(false);
   const [isGroqVaultOpen, setIsGroqVaultOpen] = useState<boolean>(false);
-  const [isMistralVaultOpen, setIsMistralVaultOpen] = useState<boolean>(false);
 
   // Connection diagnostics states
   const [testGeminiMsg, setTestGeminiMsg] = useState<string>('Belum diuji');
   const [testGeminiStatus, setTestGeminiStatus] = useState<'idle' | 'testing' | 'success' | 'err'>('idle');
   const [testGroqMsg, setTestGroqMsg] = useState<string>('Belum diuji');
   const [testGroqStatus, setTestGroqStatus] = useState<'idle' | 'testing' | 'success' | 'err'>('idle');
-  const [testMistralMsg, setTestMistralMsg] = useState<string>('Belum diuji');
-  const [testMistralStatus, setTestMistralStatus] = useState<'idle' | 'testing' | 'success' | 'err'>('idle');
 
   // Multi-model detailed diagnostics
   const [geminiDiagnostics, setGeminiDiagnostics] = useState<Record<number, Record<string, { status: 'pending' | 'testing' | 'success' | 'rate_limit' | 'not_supported' | 'error'; message: string }>>>({});
   const [groqDiagnostics, setGroqDiagnostics] = useState<Record<number, Record<string, { status: 'pending' | 'testing' | 'success' | 'rate_limit' | 'not_supported' | 'error'; message: string }>>>({});
-  const [mistralDiagnostics, setMistralDiagnostics] = useState<Record<number, Record<string, { status: 'pending' | 'testing' | 'success' | 'rate_limit' | 'not_supported' | 'error'; message: string }>>>({});
 
   // Loading & Progress metrics
   const [isProcessingAll, setIsProcessingAll] = useState<boolean>(false);
@@ -179,23 +144,12 @@ export default function App() {
     }
     setGroqKeys(loadedGroq);
 
-    const loadedMistral = [...mistralKeys];
-    for (let i = 1; i <= 5; i++) {
-      const key = localStorage.getItem(`shophub_mistral_key_${i}`);
-      if (key) {
-        loadedMistral[i - 1] = key;
-      }
-    }
-    setMistralKeys(loadedMistral);
-
     // Auto open API Vaults if keys exist
     const hasGemini = loadedGemini.some(k => k.trim().length > 5);
     const hasGroq = loadedGroq.some(k => k.trim().length > 5);
-    const hasMistral = loadedMistral.some(k => k.trim().length > 5);
 
     if (hasGemini) setIsGeminiVaultOpen(true);
     if (hasGroq) setIsGroqVaultOpen(true);
-    if (hasMistral) setIsMistralVaultOpen(true);
 
     if (hasGroq && !hasGemini) {
       setActiveAuthProvider('groq');
@@ -217,13 +171,6 @@ export default function App() {
     localStorage.setItem(`shophub_groq_key_${index + 1}`, val.trim());
   };
 
-  const handleMistralKeyChange = (index: number, val: string) => {
-    const updated = [...mistralKeys];
-    updated[index] = val.trim();
-    setMistralKeys(updated);
-    localStorage.setItem(`shophub_mistral_key_${index + 1}`, val.trim());
-  };
-
   // Toggle checklist platform
   const togglePlatform = (key: keyof TargetPlatforms) => {
     setTargetPlatforms(prev => ({ ...prev, [key]: !prev[key] }));
@@ -239,8 +186,8 @@ export default function App() {
   };
 
   // Extract non-blank keys
-  const getActiveKeys = (provider: 'gemini' | 'groq' | 'mistral'): string[] => {
-    const arr = provider === 'gemini' ? geminiKeys : provider === 'groq' ? groqKeys : mistralKeys;
+  const getActiveKeys = (provider: 'gemini' | 'groq'): string[] => {
+    const arr = provider === 'gemini' ? geminiKeys : groqKeys;
     return arr.map(k => k.trim()).filter(k => k.length > 5);
   };
 
@@ -622,128 +569,6 @@ export default function App() {
     }
   };
 
-  // Connection testing - Mistral
-  const testMistralConn = async () => {
-    const keysToTest: { key: string; index: number }[] = [];
-    mistralKeys.forEach((k, idx) => {
-      if (k.trim().length > 5) {
-        keysToTest.push({ key: k.trim(), index: idx });
-      }
-    });
-
-    if (keysToTest.length === 0) {
-      setTestMistralStatus('err');
-      setTestMistralMsg('❌ Kode Kosong. Mohon masukkan minimal satu API Key Mistral aktif!');
-      return;
-    }
-
-    setTestMistralStatus('testing');
-    setTestMistralMsg(`⏳ Menguji ${keysToTest.length} Kunci Mistral...`);
-
-    // Initialize diagnostics
-    const initialDiagnostics: Record<number, Record<string, { status: 'pending' | 'testing' | 'success' | 'rate_limit' | 'not_supported' | 'error'; message: string }>> = {};
-    keysToTest.forEach(({ index }) => {
-      initialDiagnostics[index] = {};
-      MISTRAL_MODELS.forEach(model => {
-        initialDiagnostics[index][model] = { status: 'pending', message: 'Antre...' };
-      });
-    });
-    setMistralDiagnostics(initialDiagnostics);
-
-    let anySuccess = false;
-    let anyRateLimit = false;
-
-    for (const { key, index } of keysToTest) {
-      let isKeyCompletelyInvalid = false;
-
-      for (const model of MISTRAL_MODELS) {
-        if (isKeyCompletelyInvalid) {
-          setMistralDiagnostics(prev => ({
-            ...prev,
-            [index]: {
-              ...prev[index],
-              [model]: { status: 'error', message: 'Gagal (Sandi salah)' }
-            }
-          }));
-          continue;
-        }
-
-        setMistralDiagnostics(prev => ({
-          ...prev,
-          [index]: {
-            ...prev[index],
-            [model]: { status: 'testing', message: 'Memeriksa...' }
-          }
-        }));
-
-        try {
-          const result = await testMistralApiKey(key);
-
-          if (result.valid) {
-            anySuccess = true;
-            setMistralDiagnostics(prev => ({
-              ...prev,
-              [index]: {
-                ...prev[index],
-                [model]: { status: 'success', message: '✅ Aktif' }
-              }
-            }));
-          } else {
-            const errMsg = result.error || '';
-            if (errMsg.includes('429') || errMsg.includes('Rate Limit')) {
-              anyRateLimit = true;
-              setMistralDiagnostics(prev => ({
-                ...prev,
-                [index]: {
-                  ...prev[index],
-                  [model]: { status: 'rate_limit', message: '⚠️ Limit (429)' }
-                }
-              }));
-            } else if (errMsg.includes('tidak valid') || errMsg.includes('401') || errMsg.includes('403')) {
-              isKeyCompletelyInvalid = true;
-              setMistralDiagnostics(prev => ({
-                ...prev,
-                [index]: {
-                  ...prev[index],
-                  [model]: { status: 'error', message: '❌ Kunci Salah' }
-                }
-              }));
-            } else {
-              setMistralDiagnostics(prev => ({
-                ...prev,
-                [index]: {
-                  ...prev[index],
-                  [model]: { status: 'error', message: `❌ ${errMsg.slice(0, 30)}` }
-                }
-              }));
-            }
-          }
-        } catch (e: any) {
-          setMistralDiagnostics(prev => ({
-            ...prev,
-            [index]: {
-              ...prev[index],
-              [model]: { status: 'error', message: '❌ Jaringan' }
-            }
-          }));
-        }
-
-        await new Promise(r => setTimeout(r, 150));
-      }
-    }
-
-    if (anySuccess) {
-      setTestMistralStatus('success');
-      setTestMistralMsg('✅ Selesai menguji! API Key Mistral aktif dan siap digunakan.');
-    } else if (anyRateLimit) {
-      setTestMistralStatus('err');
-      setTestMistralMsg('⚠️ Kunci Mistral valid tetapi kuota habis (429 Rate Limit). Mohon tunggu semenit.');
-    } else {
-      setTestMistralStatus('err');
-      setTestMistralMsg('❌ Koneksi Mistral gagal. Sila cek rincian di bawah.');
-    }
-  };
-
   // Handle Drag Events for file area uploader
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -911,7 +736,7 @@ export default function App() {
     }, 1500);
   };
 
-  // System instructions Builder with dynamic AI preference rules
+  // System instructions Builder
   const buildPromptInstructions = (item: QueueItem) => {
     const platformsStr = Object.keys(targetPlatforms)
       .filter(p => targetPlatforms[p as keyof TargetPlatforms])
@@ -922,31 +747,6 @@ export default function App() {
     const minD = Math.floor(item.settings.descLength * 0.8);
     const maxD = Math.ceil(item.settings.descLength * 1.2);
     const kwTarget = item.settings.keywordsCount;
-
-      // Dynamic output rules based on user preferences - TASK 9 ENHANCED
-      const dynamicRules = `
-OUTPUT RULES (WAJIB DIPATUHI):
-- Maximum title length: ${item.settings.titleLength} characters (HARD LIMIT)
-- Generate exactly ${kwTarget} keywords (NO MORE, NO LESS)
-- Maximum description length: ${item.settings.descLength} characters (HARD LIMIT)
-- Prioritize SEO-friendly commercial keywords
-
-IMPORTANT SEO RULES:
-- First 10 keywords must be highest search intent and most visually relevant.
-- Prioritize long-tail keywords (2-4 words ideal).
-- Avoid generic keywords like: food, delicious, aesthetic, tasty, yummy, beautiful, awesome, cool, nice, amazing.
-- Avoid spam keywords: beautiful, awesome, cool, nice, amazing, best quality, ultra hd, masterpiece, high quality, premium, luxury.
-- Keywords must be single words, two-word phrases, or long-tail phrases (max 5 words).
-- No technical specs like 4k, 8k, resolution, camera brand names.
-- Use commercial buyer intent keywords (copy space, background, flat lay, top view if visually relevant).
-- Only generate visually relevant keywords that actually appear in the asset.
-- Do not generate broad generic tags.
-- Use Adobe Stock SEO structure.
-- Prioritize searchable phrases over artistic wording.
-- NO keyword stuffing or phrase looping (e.g., "rabbit flat lay rabbit top view" is FORBIDDEN).
-- Each keyword must be unique and semantically distinct.
-- Structure: mix of single keywords, two-word keywords, and long-tail keywords.
-`;
 
     let specificGuides = "";
     if (item.type === 'video') {
@@ -984,37 +784,14 @@ TARGET AGENSI: ${platformsStr || 'Shutterstock, Adobe Stock, Freepik, Canva'}
 
 MISI:
 Buatlah judul komersial yang komprehensif, deskripsi kreatif yang memikat, klasifikasi kategori per platform, serta tag kata kunci ramah mesin pencari yang sepenuhnya "GROUNDED" (berpijak nyata) pada aset ini.
-${dynamicRules}
-
-IMPORTANT METADATA RULES (WAJIB DIPATUHI):
-- Generate keywords based on: 1) objects, 2) activity flow, 3) commercial concepts.
-- Ensure title and keywords are strongly related - keywords must derive from title content.
-- Generate only visually relevant keywords that actually appear in the asset.
-- Prioritize main objects first (first 10 keywords = highest search intent).
-- Use single keyword SEO structure (1-2 words max, long-tail max 3 words).
-- Avoid generic adjectives (beautiful, adorable, amazing, nice, bright, colorful).
-- Avoid filler keywords (concept, holiday mood, country, aesthetic, yummy, tasty, delicious).
-- Avoid random composition keywords (flat lay, top view, minimal, scenic, environment) unless visually confirmed.
-- First 10 keywords must be highest search intent and most visually relevant.
-- Understand 3 layers:
-  1. OBJECTS: Physical items/people visible in asset (businessman, laptop, document, office)
-  2. FLOW: Activities/actions happening (analyzing, reading, writing, presenting, working)
-  3. CONCEPTS: Commercial/business meaning (finance, compliance, strategy, management, success)
-- Generate commercial-use metadata with strong buyer intent.
-- Use Adobe Stock SEO structure.
-- Avoid keyword spam, phrase looping, or semantic duplicates.
-- Keywords must be SINGLE keyword mode: no phrases longer than 3 words.
-- Remove weak adjectives as standalone keywords.
-- Each keyword must be unique and semantically distinct.
-- TITLE ↔ KEYWORD RELEVANCE: All keywords must relate to the generated title.
 
 ATURAN METADATA 100% SUKSES:
-1. JUDUL SEO: Wajib mengandung formula 3-Layer: [Elemen fisik nyata] + [Aksi / Alur cerita] + [Makna komersial / Niche]. Panjang HARUS ${minT}-${maxT} karakter (STRICT).
-2. DESKRIPSI: Ceritakan alur visual gambar secara natural dan menarik bagi pembeli antara ${minD}-${maxD} karakter (STRICT).
+1. JUDUL SEO: Wajib mengandung formula 3-Layer: [Elemen fisik nyata] + [Aksi / Alur cerita] + [Makna komersial / Niche]. Panjang harus ${minT}-${maxT} karakter.
+2. DESKRIPSI: Ceritakan alur visual gambar secara natural dan menarik bagi pembeli antara ${minD}-${maxD} karakter.
 3. KATA KUNCI (KEYWORDS): Hasilkan TEPAT ${kwTarget} kata kunci unik. No spasi (single keywords).
-   - Urutan 1-10: OBJEK UTAMA - Subjek & visual dominan nyata yang terlihat di frame (OBJECT PRIORITY).
-   - Urutan 11-25: FLOW/AKTIVITAS - Aksi, gerak tubuh, emosi, aktivitas, scene flow.
-   - Urutan 26-${kwTarget}: KONSEP BISNIS - Hubungan konsep bisnis, kegunaan komersial, commercial intent.
+   - Urutan 1-10: Subjek & visual dominan nyata yang terlihat di frame.
+   - Urutan 11-25: Aksi, gerak tubuh, emosi, warna, pencahayaan.
+   - Urutan 26-${kwTarget}: Hubungan konsep bisnis, kegunaan komersial, trend microstock.
    ${item.settings.keyConcepts ? `- ⭐ PRIORITAS UTAMA: Kata kunci "${item.settings.keyConcepts}" wajib ditempatkan di posisi 1-5!` : ''}
 4. LEGAL & TRADEMARK SAFETY: Hindari nama brand terlarang (Nike, Apple, iPhone, BMW, Sony, dsb). Ganti dengan nama generik (modern smartphone, athletic shoes, luxury car, dsb). Dilarang keras menulis brand kamera!
 5. KATEGORI PLATFORM RESMI (WAJIB PILIH DARI DAFTAR DI BAWAH): 
@@ -1028,9 +805,9 @@ ${specificGuides}
 
 OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
 {
-  "title": "Judul 3-Layer Bahasa Inggris padat SEO, panjang SEKITAR ${item.settings.titleLength} karakter (MAX ${maxT})",
-  "description": "Deskripsi kreatif Bahasa Inggris berbobot komersial, panjang SEKITAR ${item.settings.descLength} karakter (MAX ${maxD})",
-  "keywords": [TEPAT ${kwTarget} kata kunci unik, dipisah koma, NO SPAM, SINGLE KEYWORD MODE],
+  "title": "Judul 3-Layer Bahasa Inggris padat SEO, panjang sekitar ${item.settings.titleLength} karakter",
+  "description": "Deskripsi kreatif Bahasa Inggris berbobot komersial, panjang sekitar ${item.settings.descLength} karakter",
+  "keywords": [sekumpulan kata kunci tunggal dipisah koma sejumlah tepat ${kwTarget} elemen unik],
   "categories": {
     "shutterstock1": "Kategori ke-1",
     "shutterstock2": "Kategori ke-2 berbeda",
@@ -1042,37 +819,35 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
 }`;
   };
 
-  // POST PROCESSING: Validate and Repair output payload structures with preference enforcement
+  // POST PROCESSING: Validate and Repair output payload structures
   const repairParsedOutput = (parsed: any, settings: any, fileName: string): Metadata => {
-    // 1. Repair Title - enforce strict character limit
+    // 1. Repair Title
     let repairedTitle = (parsed?.title || '').toString().trim();
-    const titleLimit = settings.titleLength || 70;
-    const minT = Math.floor(titleLimit * 0.8);
-    const maxT = Math.ceil(titleLimit * 1.2);
+    const minT = Math.floor(settings.titleLength * 0.8);
+    const maxT = Math.ceil(settings.titleLength * 1.2);
 
     if (repairedTitle.length < minT) {
       const suffixes = [" for commercial lifestyle use", " designed with creative concepts", " perfect for advertising design", " ideal for social media contents", " in high quality modern style"];
       const hash = fileName ? fileName.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) : Date.now();
       repairedTitle += suffixes[hash % suffixes.length];
     }
-    
-    // Use sanitize function for natural truncation
-    repairedTitle = truncateByCharacters(repairedTitle, titleLimit);
+    if (repairedTitle.length > maxT) {
+      repairedTitle = repairedTitle.substring(0, maxT).trim();
+    }
 
-    // 2. Repair Description - enforce strict character limit
+    // 2. Repair Description
     let repairedDesc = (parsed?.description || '').toString().trim();
-    const descLimit = settings.descLength || 160;
-    const minD = Math.floor(descLimit * 0.8);
-    const maxD = Math.ceil(descLimit * 1.2);
+    const minD = Math.floor(settings.descLength * 0.8);
+    const maxD = Math.ceil(settings.descLength * 1.2);
 
     if (repairedDesc.length < minD) {
       repairedDesc += " Highly recommended for graphic designers, digital marketers, and agencies looking for premium microstock assets.";
     }
-    
-    // Use sanitize function for natural truncation
-    repairedDesc = truncateByCharacters(repairedDesc, descLimit);
+    if (repairedDesc.length > maxD) {
+      repairedDesc = repairedDesc.substring(0, maxD).trim();
+    }
 
-    // 3. Repair Keywords - enforce exact count and SEO optimization
+    // 3. Repair Keywords
     let kws: string[] = [];
     if (Array.isArray(parsed?.keywords)) {
       kws = parsed.keywords;
@@ -1097,15 +872,7 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
     const forbidden = ["4k", "hd", "8k", "ultra", "camera", "dslr", "megapixel", "canon", "nikon", "sony", "photography", "photo", "vector", "illustration"];
     uniqueKws = uniqueKws.filter(k => !forbidden.some(word => k.toLowerCase().includes(word)));
 
-    // Remove spam keywords using filterSpamKeywords
-    uniqueKws = filterSpamKeywords(uniqueKws);
-
-    const expectedCount = settings.keywordsCount || 35;
-    
-    // Apply SEO optimization which includes sorting by commercial intent
-    uniqueKws = optimizeMicrostockKeywords(uniqueKws, expectedCount);
-    
-    // Fill with backup keywords if still under target
+    const expectedCount = settings.keywordsCount;
     if (uniqueKws.length < expectedCount) {
       const backupKws = ["background", "design", "element", "concept", "abstract", "commercial", "asset", "contemporary", "creative", "clean", "minimalist", "modern", "lifestyle", "composition", "presentation"];
       for (const b of backupKws) {
@@ -1114,12 +881,11 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
           uniqueKws.push(b);
         }
       }
+    } else if (uniqueKws.length > expectedCount) {
+      uniqueKws = uniqueKws.slice(0, expectedCount);
     }
-    
-    // Final trim to exact count
-    uniqueKws = uniqueKws.slice(0, expectedCount);
 
-    // Ensure key concepts are prioritized
+    // Ensure key concepts
     if (settings.keyConcepts) {
       const concepts = settings.keyConcepts.toLowerCase().split(',').map(c => c.trim()).filter(Boolean);
       concepts.forEach(concept => {
@@ -1133,24 +899,6 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
         }
       });
       uniqueKws = uniqueKws.slice(0, expectedCount);
-    }
-
-    // Final validation against preferences
-    console.log("Applied AI Preferences:", {
-      titleLength: titleLimit,
-      keywordsCount: expectedCount,
-      descriptionLength: descLimit
-    });
-
-    // Validation checks
-    if (repairedTitle.length > titleLimit) {
-      console.warn(`Title exceeded limit: ${repairedTitle.length} > ${titleLimit}`);
-    }
-    if (repairedDesc.length > descLimit) {
-      console.warn(`Description exceeded limit: ${repairedDesc.length} > ${descLimit}`);
-    }
-    if (uniqueKws.length !== expectedCount) {
-      console.warn(`Keyword count mismatch: ${uniqueKws.length} !== ${expectedCount}`);
     }
 
     return {
@@ -1323,67 +1071,6 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
     throw new Error(lastError || "Semua model & kunci API Groq gagal merespons.");
   };
 
-  // Direct fetch to Mistral API Model
-  const fetchMistralDirect = async (item: QueueItem, systemPrompt: string, userPrompt: string): Promise<string> => {
-    const activeKeys = getActiveKeys('mistral' as any);
-    if (activeKeys.length === 0) {
-      throw new Error("Mohon masukkan minimal 1 API Key Mistral di tab!");
-    }
-
-    const model = selectedMistralModel;
-    let lastError = "";
-    const maxAttempts = activeKeys.length * 3; // 3 retries per key
-
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const testKeyIndex = attempt % activeKeys.length;
-      const key = activeKeys[testKeyIndex];
-
-      try {
-        console.log('Using Mistral Model:', model);
-        
-        const response = await performMistralCall({
-          model,
-          key,
-          payload: {
-            model,
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: userPrompt }
-            ],
-            temperature: 0.4,
-            max_tokens: 1200,
-            response_format: { type: 'json_object' }
-          }
-        }, isUsingClientFallback);
-
-        if (response.ok) {
-          const data = await response.json();
-          const rawText = (data.choices?.[0]?.message?.content || '').trim();
-          if (rawText) {
-            console.log('Mistral API Connected');
-            return rawText;
-          }
-        } else {
-          const errBody = await response.json().catch(() => ({}));
-          const errMsg = errBody?.error?.message || response.statusText;
-
-          if (response.status === 429 || errMsg.includes("rate limit")) {
-            lastError = `Mistral [${model}] Kunci #${testKeyIndex + 1}: Rate Limit. Menunggu antrean...`;
-            await new Promise(r => setTimeout(r, 1000));
-          } else {
-            lastError = `Mistral [${model}] Kunci #${testKeyIndex + 1}: ${errMsg}`;
-          }
-        }
-      } catch (e: any) {
-        lastError = `Mistral [${model}] Kunci #${testKeyIndex + 1}: ${e.message || 'Network Fail'}`;
-      }
-
-      await new Promise(r => setTimeout(r, speed3x ? 50 : 200));
-    }
-
-    throw new Error(lastError || "Semua kunci API Mistral gagal merespons.");
-  };
-
   // Process single metadata generation
   const processSingle = async (itemId: string) => {
     // Locate element
@@ -1398,20 +1085,12 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
 
     try {
       let resultText = "";
-      
-      // Determine which provider to use based on selection
-      const providerToUse = aiProviderSelection === 'auto' 
-        ? (activeAuthProvider === 'gemini' ? 'gemini' : 'groq')
-        : aiProviderSelection;
-
-      if (providerToUse === 'gemini') {
+      if (activeAuthProvider === 'gemini') {
         resultText = await fetchGeminiDirect(queueItem, sysPrompt, userPrompt);
-      } else if (providerToUse === 'groq') {
+      } else if (activeAuthProvider === 'groq') {
         resultText = await fetchGroqDirect(queueItem, sysPrompt, userPrompt);
-      } else if (providerToUse === 'mistral') {
-        resultText = await fetchMistralDirect(queueItem, sysPrompt, userPrompt);
       } else {
-        throw new Error("Pilih provider koneksi (Gemini / Groq / Mistral) terlebih dahulu!");
+        throw new Error("Pilih provider koneksi (Gemini / Groq) terlebih dahulu!");
       }
 
       // JSON Extractor
@@ -1429,29 +1108,15 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
 
       const parsedObj = JSON.parse(cleanJson);
       
-      // Step 1: Basic repair and structure normalization
-      let normalizedMeta = repairParsedOutput(parsedObj, queueItem.settings, queueItem.name);
-      
-      // Step 2: HARD ENFORCEMENT SYSTEM - Apply full metadata pipeline
-      const finalMetadata = processFinalMetadata({
-        metadata: normalizedMeta,
-        visionAnalysis: {
-          sceneDescription: queueItem.name,
-          detectedObjects: [],
-          detectedActions: []
-        },
-        settings: queueItem.settings
-      });
-      
-      // Step 3: Final category merge
-      finalMetadata.categories = normalizedMeta.categories;
+      // Perform validation and error recoveries
+      const normalizedMeta = repairParsedOutput(parsedObj, queueItem.settings, queueItem.name);
 
       setItems(prev => prev.map(i => {
         if (i.id === itemId) {
           return {
             ...i,
             status: 'success',
-            metadata: finalMetadata
+            metadata: normalizedMeta
           };
         }
         return i;
@@ -1480,25 +1145,9 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
         }
 
         const parsedObj = JSON.parse(cleanJson);
-        
-        // Step 1: Basic repair and structure normalization
-        let normalizedMeta = repairParsedOutput(parsedObj, queueItem.settings, queueItem.name);
-        
-        // Step 2: HARD ENFORCEMENT SYSTEM - Apply full metadata pipeline
-        const finalMetadata = processFinalMetadata({
-          metadata: normalizedMeta,
-          visionAnalysis: {
-            sceneDescription: queueItem.name,
-            detectedObjects: [],
-            detectedActions: []
-          },
-          settings: queueItem.settings
-        });
-        
-        // Step 3: Final category merge
-        finalMetadata.categories = normalizedMeta.categories;
+        const normalizedMeta = repairParsedOutput(parsedObj, queueItem.settings, queueItem.name);
 
-        setItems(prev => prev.map(i => i.id === itemId ? { ...i, status: 'success', metadata: finalMetadata } : i));
+        setItems(prev => prev.map(i => i.id === itemId ? { ...i, status: 'success', metadata: normalizedMeta } : i));
       } catch (retryError: any) {
         setItems(prev => prev.map(i => i.id === itemId ? { ...i, status: 'error', errorMsg: `${errMsg} (Retry gagal: ${retryError.message})` } : i));
       }
@@ -2172,8 +1821,8 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
                       )}
 
                     {/* Engine Source Selection Tabs */}
-                    <div className="grid grid-cols-4 gap-1 bg-slate-100 p-1 rounded-2xl mb-4 text-center">
-                      {(['gemini', 'groq', 'mistral', 'helper'] as AuthProvider[]).map((p) => {
+                    <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-2xl mb-4 text-center">
+                      {(['gemini', 'groq', 'helper'] as AuthProvider[]).map((p) => {
                         const isTabActive = activeAuthProvider === p;
                         return (
                           <button
@@ -2186,7 +1835,7 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
                                 : 'text-slate-500 hover:text-slate-900'
                             }`}
                           >
-                            {p === 'gemini' ? '🔮 Gemini' : p === 'groq' ? '⚡ Groq' : p === 'mistral' ? '🌟 Mistral' : 'Bantuan'}
+                            {p === 'gemini' ? '🔮 Gemini' : p === 'groq' ? '⚡ Groq' : 'Bantuan'}
                           </button>
                         );
                       })}
@@ -2591,220 +2240,6 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
                       </div>
                     )}
 
-                    {/* Mistral Config Tab View */}
-                    {activeAuthProvider === 'mistral' && (
-                      <div className="space-y-4">
-                        
-                        {/* Visual API Vault Box Accordion */}
-                        <div className="border border-slate-200 rounded-2xl overflow-hidden bg-slate-50/50">
-                          <div 
-                            onClick={() => setIsMistralVaultOpen(!isMistralVaultOpen)}
-                            className="flex items-center justify-between p-3.5 bg-slate-100/50 hover:bg-slate-100 cursor-pointer transition-colors border-b border-slate-200"
-                          >
-                            <span className="text-xs font-extrabold text-slate-700 flex items-center">
-                              <CheckCircle2 className="w-4 h-4 mr-2 text-violet-500" />
-                              Vault Key Mistral ({getActiveKeys('mistral').length}/5)
-                            </span>
-                            <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${isMistralVaultOpen ? 'rotate-180' : ''}`} />
-                          </div>
-
-                          <AnimatePresence>
-                            {isMistralVaultOpen && (
-                              <motion.div 
-                                initial={{ height: 0 }}
-                                animate={{ height: 'auto' }}
-                                exit={{ height: 0 }}
-                                className="overflow-hidden bg-white p-4 space-y-3 border-t border-slate-100"
-                              >
-                                {mistralKeys.map((k, idx) => (
-                                  <div key={`mistral-key-${idx}`} className="relative">
-                                    <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-[10px] font-bold text-slate-400">
-                                      #{idx + 1}
-                                    </span>
-                                    <input
-                                      type="password"
-                                      value={k}
-                                      onChange={(e) => handleMistralKeyChange(idx, e.target.value)}
-                                      placeholder={`Masukkan Kunci Mistral Ke-${idx + 1}`}
-                                      className="w-full text-xs pl-8 pr-3 py-3 border border-slate-200 rounded-xl focus:outline-none focus:border-violet-500 font-mono bg-slate-50/50 hover:bg-white focus:bg-white transition-colors"
-                                    />
-                                  </div>
-                                ))}
-
-                                {/* Diagnose Testing Buttons */}
-                                <div className="flex flex-col space-y-2 mt-3 pt-2.5 border-t border-slate-100">
-                                  <div className="flex items-center justify-between">
-                                    <button
-                                      type="button"
-                                      disabled={testMistralStatus === 'testing'}
-                                      onClick={testMistralConn}
-                                      className="px-3 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl text-[10px] font-bold transition-all flex items-center space-x-1.5 active:scale-95"
-                                    >
-                                      {testMistralStatus === 'testing' ? (
-                                        <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin text-violet-500" />
-                                      ) : (
-                                        <CheckCircle2 className="w-3.5 h-3.5 mr-1.5 text-violet-500" />
-                                      )}
-                                      <span>Uji Koneksi Kunci</span>
-                                    </button>
-                                    <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full border shadow-sm ${
-                                      testMistralStatus === 'success' ? 'bg-emerald-100 text-emerald-800 border-emerald-200' :
-                                      testMistralStatus === 'err' ? 'bg-rose-100 text-rose-700 border-rose-200' :
-                                      testMistralStatus === 'testing' ? 'bg-violet-100 text-violet-700 border-violet-200 animate-pulse' :
-                                      'bg-slate-100 text-slate-500 border-slate-200'
-                                    }`}>
-                                      {testMistralStatus === 'success' ? 'Connected' : testMistralStatus === 'err' ? 'Invalid Key' : testMistralStatus === 'testing' ? 'Testing...' : 'Belum diuji'}
-                                    </span>
-                                  </div>
-                                  <div className={`text-[11px] leading-relaxed break-words whitespace-pre-wrap p-2.5 rounded-xl ${
-                                    testMistralStatus === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100 font-semibold' :
-                                    testMistralStatus === 'err' ? 'bg-rose-50 text-rose-600 border border-rose-100 font-semibold text-xs' : 'text-slate-500 bg-slate-50 border border-slate-100'
-                                  }`}>
-                                    {testMistralMsg}
-                                  </div>
-
-                                  {/* Rincian Diagnosa Berbagai Model Mistral */}
-                                  {Object.keys(mistralDiagnostics).length > 0 && (
-                                    <div className="mt-2.5 space-y-2 bg-slate-50 border border-slate-150 p-3 rounded-2xl">
-                                      <div className="text-[9px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center justify-between">
-                                        <span>Status Koneksi per Model</span>
-                                        <span className="text-violet-600 font-mono">Mistral Engine</span>
-                                      </div>
-                                      
-                                      {Object.entries(mistralDiagnostics).map(([slotIdxStr, modelsRecord]) => {
-                                        const slotIdx = parseInt(slotIdxStr);
-                                        const keySnippet = mistralKeys[slotIdx]?.trim() || '';
-                                        const shortKey = keySnippet.length > 8 ? `${keySnippet.slice(0, 4)}...${keySnippet.slice(-4)}` : 'Sandi';
-
-                                        return (
-                                          <div key={`mistral-dia-slot-${slotIdx}`} className="bg-white rounded-xl border border-slate-100 p-2.5 space-y-1.5 shadow-sm">
-                                            <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
-                                              <span className="text-[10px] font-extrabold text-slate-700 flex items-center">
-                                                <span className="inline-block w-1.5 h-1.5 rounded-full bg-violet-500 mr-1.5"></span>
-                                                Kunci #{slotIdx + 1}
-                                              </span>
-                                              
-                                              {/* Overall Key Status Summary Badge */}
-                                              {(() => {
-                                                const diags = Object.values(modelsRecord);
-                                                const hasSuccess = diags.some(d => d.status === 'success');
-                                                const hasRateLimit = diags.some(d => d.status === 'rate_limit');
-                                                const hasTesting = diags.some(d => d.status === 'testing');
-                                                const allWrong = diags.length > 0 && diags.every(d => d.status === 'error');
-                                                
-                                                let badgeText = 'Antre...';
-                                                let badgeClass = 'bg-slate-50 text-slate-500 border-slate-200';
-                                                
-                                                if (hasSuccess) {
-                                                  badgeText = 'AKTIF & READY';
-                                                  badgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-200';
-                                                } else if (hasRateLimit) {
-                                                  badgeText = 'LIMIT KUOTA (429)';
-                                                  badgeClass = 'bg-amber-100 text-amber-800 border-amber-200 animate-pulse';
-                                                } else if (hasTesting) {
-                                                  badgeText = 'MENGECEK...';
-                                                  badgeClass = 'bg-violet-100 text-violet-800 border-violet-200 animate-pulse';
-                                                } else if (allWrong) {
-                                                  badgeText = 'KUNCI SALAH';
-                                                  badgeClass = 'bg-rose-100 text-rose-800 border-rose-200';
-                                                } else if (diags.length > 0) {
-                                                  badgeText = 'BLOKIR / TDK COCOK';
-                                                  badgeClass = 'bg-slate-100 text-slate-700 border-slate-300';
-                                                }
-                                                
-                                                return (
-                                                  <span className={`text-[8.5px] font-extrabold px-2 py-0.5 rounded-full border shadow-sm shrink-0 ${badgeClass}`}>
-                                                    {badgeText}
-                                                  </span>
-                                                );
-                                              })()}
-
-                                              <span className="text-[9px] font-mono text-slate-400 font-semibold bg-slate-50 px-1.5 py-0.5 rounded border border-slate-150">
-                                                {shortKey}
-                                              </span>
-                                            </div>
-                                            
-                                            <div className="grid grid-cols-1 gap-1">
-                                              {Object.entries(modelsRecord).map(([modelName, diag]) => {
-                                                let badgeColor = 'bg-slate-50 text-slate-500 border-slate-150';
-                                                if (diag.status === 'success') badgeColor = 'bg-emerald-50 text-emerald-700 border-emerald-100';
-                                                else if (diag.status === 'rate_limit') badgeColor = 'bg-amber-50 text-amber-600 border-amber-100';
-                                                else if (diag.status === 'not_supported') badgeColor = 'bg-slate-50 text-slate-400 border-slate-200';
-                                                else if (diag.status === 'testing') badgeColor = 'bg-violet-50 text-violet-600 border-violet-100 animate-pulse';
-                                                else if (diag.status === 'error') badgeColor = 'bg-rose-50 text-rose-600 border-rose-100';
-
-                                                return (
-                                                  <div key={modelName} className="flex items-center justify-between text-[10px] py-1 border-b border-dashed border-slate-50 last:border-0">
-                                                    <span className="font-mono text-slate-500 font-semibold truncate">{modelName}</span>
-                                                    <span className={`px-2 py-0.5 rounded-lg border text-[8px] font-bold shrink-0 shadow-sm ${badgeColor}`}>
-                                                      {diag.message}
-                                                    </span>
-                                                  </div>
-                                                );
-                                              })}
-                                            </div>
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  )}
-                                </div>
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </div>
-
-                        {/* Mistral Model List Checks */}
-                        <div className="space-y-2">
-                          <label className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">
-                            Model Prioritas Mistral
-                          </label>
-                          <div className="space-y-1.5 bg-slate-50 p-3 rounded-2xl border border-slate-200 font-medium">
-                            {[
-                              { model: 'mistral-small-4', badge: 'Fast', desc: 'Optimal balance of speed and intelligence.' },
-                              { model: 'mistral-medium-3.5', badge: 'Best', desc: 'Highest quality for complex reasoning tasks.' },
-                              { model: 'devstral-2', badge: 'Reasoning', desc: 'Advanced reasoning and code generation.' },
-                              { model: 'codestral', badge: 'Coding', desc: 'Specialized for code completion and generation.' },
-                              { model: 'ministral-8b', badge: 'Light', desc: 'Efficient model for lightweight tasks.' },
-                              { model: 'ministral-3b', badge: 'Ultra Lite', desc: 'Ultra-fast model for simple queries.' }
-                            ].map(({ model, badge, desc }) => (
-                              <label 
-                                key={model} 
-                                className="flex flex-col text-xs font-semibold text-slate-700 cursor-pointer p-2 hover:bg-slate-200/40 rounded-xl transition-all border border-transparent hover:border-slate-100"
-                              >
-                                <div className="flex items-center space-x-2.5">
-                                  <input
-                                    type="radio"
-                                    name="mistralModel"
-                                    checked={selectedMistralModel === model}
-                                    onChange={() => setSelectedMistralModel(model)}
-                                    className="rounded border-slate-300 text-violet-600 focus:ring-violet-500 h-4 w-4"
-                                  />
-                                  <span className="truncate flex items-center justify-between w-full">
-                                    <span className="font-mono text-[10px] font-bold">{model}</span>
-                                    <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-bold ${
-                                      badge === 'Fast' ? 'bg-blue-100 text-blue-800' :
-                                      badge === 'Best' ? 'bg-emerald-100 text-emerald-800' :
-                                      badge === 'Coding' ? 'bg-purple-100 text-purple-800' :
-                                      badge === 'Reasoning' ? 'bg-indigo-100 text-indigo-800' :
-                                      badge === 'Light' ? 'bg-amber-100 text-amber-800' :
-                                      'bg-slate-100 text-slate-700'
-                                    }`}>
-                                      {badge}
-                                    </span>
-                                  </span>
-                                </div>
-                                <span className="text-[9px] text-slate-400 font-medium ml-6.5 mt-0.5">
-                                  {desc}
-                                </span>
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-
-                      </div>
-                    )}
-
                     {/* Guide Tab */}
                     {activeAuthProvider === 'helper' && (
                       <div className="p-4 bg-violet-50/50 rounded-2xl border border-violet-100 text-xs space-y-3">
@@ -2826,14 +2261,6 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
                               <li>Kunjungi <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" className="text-violet-600 underline font-bold hover:text-violet-700">Groq Developer Console ↗</a></li>
                               <li>Login akun gratis dan pilih menu <strong>API Keys</strong>.</li>
                               <li>Salin kuncinya yang berawalan <span className="font-mono text-[9px] bg-slate-100 px-1 py-0.5 rounded">gsk_...</span></li>
-                            </ol>
-                          </div>
-                          <div>
-                            <p className="font-bold text-violet-800 border-b border-violet-200/40 pb-0.5">🌟 Mistral AI Key:</p>
-                            <ol className="list-decimal list-inside pl-1 space-y-1">
-                              <li>Kunjungi <a href="https://console.mistral.ai/api-keys/" target="_blank" rel="noreferrer" className="text-violet-600 underline font-bold hover:text-violet-700">Mistral AI Console ↗</a></li>
-                              <li>Login atau buat akun gratis, lalu buka menu <strong>API Keys</strong>.</li>
-                              <li>Klik <strong>"Create API Key"</strong> dan salin kuncinya.</li>
                             </ol>
                           </div>
                         </div>
