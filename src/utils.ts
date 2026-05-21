@@ -1,6 +1,203 @@
 import { BANNED_TRADEMARKS } from './constants';
 import { QueueItem } from './types';
 
+// =========================================
+// MICROSTOCK SEO UTILITIES
+// =========================================
+
+// Commercial keywords with high buyer intent (priority order)
+const COMMERCIAL_KEYWORDS = [
+  'copy space',
+  'background',
+  'banner',
+  'template',
+  'flat lay',
+  'top view',
+  'commercial',
+  'advertising',
+  'mockup'
+];
+
+// Spam/low-value keywords blacklist for microstock 2026
+const SPAM_KEYWORDS_BLACKLIST = [
+  'beautiful',
+  'awesome',
+  'cool',
+  'nice',
+  'amazing',
+  'best quality',
+  'ultra hd',
+  'masterpiece'
+];
+
+/**
+ * Sort keywords by SEO value and buyer intent
+ * Prioritizes commercial keywords first, then alphabetical
+ */
+export function sortKeywordsBySEO(keywords: string[]): string[] {
+  if (!keywords || keywords.length === 0) return [];
+
+  const lowerKeywords = keywords.map(kw => kw.toLowerCase().trim());
+  
+  // Separate commercial priority keywords from regular keywords
+  const commercialKeywords: string[] = [];
+  const regularKeywords: string[] = [];
+
+  lowerKeywords.forEach(kw => {
+    if (COMMERCIAL_KEYWORDS.some(commercial => kw.includes(commercial) || commercial.includes(kw))) {
+      if (!commercialKeywords.includes(kw)) {
+        commercialKeywords.push(kw);
+      }
+    } else {
+      if (!regularKeywords.includes(kw)) {
+        regularKeywords.push(kw);
+      }
+    }
+  });
+
+  // Sort commercial keywords by priority order
+  commercialKeywords.sort((a, b) => {
+    const aIndex = COMMERCIAL_KEYWORDS.findIndex(ck => a.includes(ck) || ck.includes(a));
+    const bIndex = COMMERCIAL_KEYWORDS.findIndex(ck => b.includes(ck) || ck.includes(b));
+    return aIndex - bIndex;
+  });
+
+  // Sort regular keywords alphabetically
+  regularKeywords.sort();
+
+  return [...commercialKeywords, ...regularKeywords];
+}
+
+/**
+ * Generate long-tail keyword variations from base keywords
+ * Creates more specific, searchable combinations for modern microstock platforms
+ */
+export function generateLongTailKeywords(keywords: string[], maxVariations: number = 10): string[] {
+  if (!keywords || keywords.length < 2) return [];
+
+  const longTailKeywords: string[] = [];
+  const commonModifiers = ['modern', 'professional', 'creative', 'minimal', 'vintage', '3d render', 'isolated', 'transparent background'];
+  
+  // Generate combination keywords
+  for (let i = 0; i < keywords.length && longTailKeywords.length < maxVariations; i++) {
+    for (let j = i + 1; j < keywords.length && longTailKeywords.length < maxVariations; j++) {
+      const combined = `${keywords[i]} ${keywords[j]}`;
+      if (combined.length <= 50 && !keywords.includes(combined)) {
+        longTailKeywords.push(combined);
+      }
+    }
+    
+    // Add modifier combinations for main keywords
+    if (i < 5) {
+      commonModifiers.slice(0, 3).forEach(modifier => {
+        if (longTailKeywords.length < maxVariations) {
+          const modified = `${modifier} ${keywords[i]}`;
+          if (!keywords.includes(modified) && !longTailKeywords.includes(modified)) {
+            longTailKeywords.push(modified);
+          }
+        }
+      });
+    }
+  }
+
+  return longTailKeywords;
+}
+
+/**
+ * Filter out spam and low-value keywords
+ * Removes subjective adjectives and technical specs that don't improve searchability
+ */
+export function filterSpamKeywords(keywords: string[]): string[] {
+  if (!keywords || keywords.length === 0) return [];
+
+  return keywords.filter(kw => {
+    const lowerKw = kw.toLowerCase().trim();
+    return !SPAM_KEYWORDS_BLACKLIST.some(spam => 
+      lowerKw === spam || lowerKw.includes(spam)
+    );
+  });
+}
+
+/**
+ * Detect commercial intent in keywords
+ * Returns score 0-100 based on buyer intent strength
+ */
+export function detectCommercialIntent(keywords: string[]): number {
+  if (!keywords || keywords.length === 0) return 0;
+
+  let score = 0;
+  const lowerKeywords = keywords.map(kw => kw.toLowerCase());
+
+  // Check for commercial keywords presence
+  COMMERCIAL_KEYWORDS.forEach(commercial => {
+    if (lowerKeywords.some(kw => kw.includes(commercial))) {
+      score += 15;
+    }
+  });
+
+  // Check for action/buyer intent words
+  const buyerIntentWords = ['buy', 'sale', 'download', 'vector', 'eps', 'png', 'svg', 'editable', 'customizable', 'printable', 'template', 'kit', 'bundle', 'pack', 'set'];
+  buyerIntentWords.forEach(word => {
+    if (lowerKeywords.some(kw => kw.includes(word))) {
+      score += 5;
+    }
+  });
+
+  // Cap at 100
+  return Math.min(score, 100);
+}
+
+/**
+ * Optimize keywords for microstock platforms (Adobe Stock, Shutterstock, Freepik, iStock 2026)
+ * Combines all SEO optimizations: filtering, sorting, long-tail generation, deduplication
+ * Limits to maximum 35 keywords as per platform best practices
+ */
+export function optimizeMicrostockKeywords(keywords: string[], maxKeywords: number = 35): string[] {
+  if (!keywords || keywords.length === 0) return [];
+
+  // Step 1: Clean and normalize keywords
+  let cleaned = keywords
+    .map(kw => kw.trim())
+    .filter(kw => kw.length > 0 && kw.length <= 50);
+
+  // Step 2: Remove duplicates (case-insensitive)
+  const seen = new Set<string>();
+  cleaned = cleaned.filter(kw => {
+    const lower = kw.toLowerCase();
+    if (seen.has(lower)) return false;
+    seen.add(lower);
+    return true;
+  });
+
+  // Step 3: Filter spam keywords
+  cleaned = filterSpamKeywords(cleaned);
+
+  // Step 4: Generate long-tail variations
+  const longTail = generateLongTailKeywords(cleaned, 10);
+  cleaned = [...cleaned, ...longTail];
+
+  // Step 5: Remove duplicates again after long-tail generation
+  seen.clear();
+  cleaned = cleaned.filter(kw => {
+    const lower = kw.toLowerCase();
+    if (seen.has(lower)) return false;
+    seen.add(lower);
+    return true;
+  });
+
+  // Step 6: Sort by SEO value
+  cleaned = sortKeywordsBySEO(cleaned);
+
+  // Step 7: Limit to max keywords
+  cleaned = cleaned.slice(0, maxKeywords);
+
+  return cleaned;
+}
+
+// =========================================
+// EXISTING UTILITY FUNCTIONS
+// =========================================
+
 // Scan text for potential IP or Trademark violations
 export function scanIPViolations(text: string): string[] {
   if (!text) return [];
@@ -23,7 +220,10 @@ export function measureSEOQuality(item: QueueItem): { score: number; issues: str
   const issues: string[] = [];
   const title = item.metadata.title || "";
   const description = item.metadata.description || "";
-  const keywords = item.metadata.keywords || [];
+  let keywords = item.metadata.keywords || [];
+
+  // Optimize keywords using new SEO function
+  keywords = optimizeMicrostockKeywords(keywords);
 
   // Title validation
   if (title.length < 15) {
