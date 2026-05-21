@@ -51,7 +51,9 @@ import {
   optimizeMicrostockKeywords,
   truncateByCharacters,
   truncateByWords,
-  filterSpamKeywords
+  filterSpamKeywords,
+  sanitizeKeywords,
+  applyUserPreferences
 } from './utils';
 
 export default function App() {
@@ -1155,15 +1157,33 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
 
       const parsedObj = JSON.parse(cleanJson);
       
-      // Perform validation and error recoveries
-      const normalizedMeta = repairParsedOutput(parsedObj, queueItem.settings, queueItem.name);
+      // Step 1: Basic repair and structure normalization
+      let normalizedMeta = repairParsedOutput(parsedObj, queueItem.settings, queueItem.name);
+      
+      // Step 2: Apply SEO optimization layer
+      normalizedMeta.keywords = sanitizeKeywords(
+        normalizedMeta.keywords || [],
+        queueItem.settings.keywordsCount || 35
+      );
+      
+      // Step 3: Apply microstock keyword optimization (sorting by commercial intent)
+      normalizedMeta.keywords = optimizeMicrostockKeywords(
+        normalizedMeta.keywords,
+        queueItem.settings.keywordsCount || 35
+      );
+      
+      // Step 4: Apply user preferences enforcement (title/desc length, keyword count, key concepts priority)
+      const finalMetadata = applyUserPreferences(normalizedMeta, queueItem.settings);
+      
+      // Step 5: Final category merge
+      finalMetadata.categories = normalizedMeta.categories;
 
       setItems(prev => prev.map(i => {
         if (i.id === itemId) {
           return {
             ...i,
             status: 'success',
-            metadata: normalizedMeta
+            metadata: finalMetadata
           };
         }
         return i;
@@ -1192,9 +1212,29 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
         }
 
         const parsedObj = JSON.parse(cleanJson);
-        const normalizedMeta = repairParsedOutput(parsedObj, queueItem.settings, queueItem.name);
+        
+        // Step 1: Basic repair and structure normalization
+        let normalizedMeta = repairParsedOutput(parsedObj, queueItem.settings, queueItem.name);
+        
+        // Step 2: Apply SEO optimization layer
+        normalizedMeta.keywords = sanitizeKeywords(
+          normalizedMeta.keywords || [],
+          queueItem.settings.keywordsCount || 35
+        );
+        
+        // Step 3: Apply microstock keyword optimization (sorting by commercial intent)
+        normalizedMeta.keywords = optimizeMicrostockKeywords(
+          normalizedMeta.keywords,
+          queueItem.settings.keywordsCount || 35
+        );
+        
+        // Step 4: Apply user preferences enforcement (title/desc length, keyword count, key concepts priority)
+        const finalMetadata = applyUserPreferences(normalizedMeta, queueItem.settings);
+        
+        // Step 5: Final category merge
+        finalMetadata.categories = normalizedMeta.categories;
 
-        setItems(prev => prev.map(i => i.id === itemId ? { ...i, status: 'success', metadata: normalizedMeta } : i));
+        setItems(prev => prev.map(i => i.id === itemId ? { ...i, status: 'success', metadata: finalMetadata } : i));
       } catch (retryError: any) {
         setItems(prev => prev.map(i => i.id === itemId ? { ...i, status: 'error', errorMsg: `${errMsg} (Retry gagal: ${retryError.message})` } : i));
       }
