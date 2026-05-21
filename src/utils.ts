@@ -20,6 +20,95 @@ import {
 // =========================================
 
 /**
+ * TASK 1: Metadata Intelligence System - Analyze visual intent
+ * Returns structured analysis of objects, scene flow, and commercial concepts
+ */
+export interface MetadataIntentAnalysis {
+  objects: string[];        // Main objects detected in asset
+  sceneFlow: string[];      // Scene understanding / scenario
+  commercialConcept: string[]; // Commercial intent concepts
+}
+
+export function analyzeMetadataIntent(
+  visualDescription: string,
+  detectedObjects?: string[]
+): MetadataIntentAnalysis {
+  const lowerDesc = (visualDescription || '').toLowerCase();
+  
+  const result: MetadataIntentAnalysis = {
+    objects: [],
+    sceneFlow: [],
+    commercialConcept: []
+  };
+
+  // Extract objects from visual description or detected objects
+  if (detectedObjects && detectedObjects.length > 0) {
+    result.objects = detectedObjects.filter(obj => obj.trim().length > 0);
+  } else {
+    // Fallback: extract noun-like words from description
+    const objectCandidates = lowerDesc.match(/\b[a-z]{3,15}\b/g) || [];
+    result.objects = objectCandidates.slice(0, 10);
+  }
+
+  // Detect scene flow / scenario
+  const sceneIndicators: Record<string, string[]> = {
+    easter: ['easter', 'bunny', 'rabbit', 'egg', 'basket', 'spring'],
+    spring: ['spring', 'flower', 'bloom', 'garden', 'fresh'],
+    christmas: ['christmas', 'santa', 'tree', 'ornament', 'snow', 'holiday'],
+    halloween: ['halloween', 'pumpkin', 'ghost', 'spooky', 'costume'],
+    birthday: ['birthday', 'cake', 'candle', 'party', 'celebration'],
+    wedding: ['wedding', 'bride', 'groom', 'ring', 'ceremony'],
+    business: ['business', 'office', 'meeting', 'corporate', 'professional'],
+    food: ['food', 'meal', 'dish', 'ingredient', 'cooking', 'recipe'],
+    nature: ['nature', 'landscape', 'outdoor', 'scenic', 'environment'],
+    technology: ['technology', 'digital', 'device', 'screen', 'interface']
+  };
+
+  Object.entries(sceneIndicators).forEach(([scene, keywords]) => {
+    if (keywords.some(kw => lowerDesc.includes(kw))) {
+      result.sceneFlow.push(scene);
+    }
+  });
+
+  // Add generic scene descriptors based on composition
+  if (lowerDesc.includes('white background') || lowerDesc.includes('isolated')) {
+    result.sceneFlow.push('studio setup');
+  }
+  if (lowerDesc.includes('flat lay') || lowerDesc.includes('top view')) {
+    result.sceneFlow.push('overhead composition');
+  }
+  if (lowerDesc.includes('lifestyle') || lowerDesc.includes('people')) {
+    result.sceneFlow.push('lifestyle scenario');
+  }
+
+  // Detect commercial concepts
+  const commercialIndicators: Record<string, string[]> = {
+    'copy space': ['copy space', 'empty space', 'text space', 'negative space'],
+    'isolated': ['isolated', 'cut out', 'white background', 'transparent'],
+    'background': ['background', 'backdrop', 'wallpaper', 'pattern'],
+    'template': ['template', 'layout', 'design element', 'mockup'],
+    'advertising': ['advertising', 'commercial', 'marketing', 'promotional'],
+    'banner': ['banner', 'header', 'web banner', 'social media'],
+    'flat lay': ['flat lay', 'top view', 'overhead', 'knolling'],
+    'minimal': ['minimal', 'minimalist', 'clean', 'simple'],
+    'conceptual': ['concept', 'symbolic', 'metaphor', 'abstract idea']
+  };
+
+  Object.entries(commercialIndicators).forEach(([concept, keywords]) => {
+    if (keywords.some(kw => lowerDesc.includes(kw))) {
+      result.commercialConcept.push(concept);
+    }
+  });
+
+  // Ensure at least some commercial concepts for buyer intent
+  if (result.commercialConcept.length === 0) {
+    result.commercialConcept.push('commercial use');
+  }
+
+  return result;
+}
+
+/**
  * Scan text for compliance violations across all banned categories
  */
 export function scanComplianceViolations(
