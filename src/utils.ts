@@ -194,6 +194,107 @@ export function optimizeMicrostockKeywords(keywords: string[], maxKeywords: numb
   return cleaned;
 }
 
+/**
+ * Truncate text by character count without cutting words
+ * Ensures natural sentence breaks
+ */
+export function truncateByCharacters(text: string, maxChars: number): string {
+  if (!text || text.length <= maxChars) return text || '';
+  
+  // Try to cut at last space before maxChars
+  let truncated = text.substring(0, maxChars);
+  const lastSpace = truncated.lastIndexOf(' ');
+  
+  if (lastSpace > maxChars * 0.7) {
+    // Cut at word boundary if we're past 70% of max length
+    truncated = truncated.substring(0, lastSpace);
+  }
+  
+  // Ensure we don't end with punctuation issues
+  truncated = truncated.replace(/[.,!?;:]+$/, '');
+  
+  return truncated.trim();
+}
+
+/**
+ * Truncate text by word count
+ * Keeps exactly N words
+ */
+export function truncateByWords(text: string, maxWords: number): string {
+  if (!text) return '';
+  
+  const words = text.split(/\s+/).filter(w => w.length > 0);
+  if (words.length <= maxWords) return text;
+  
+  return words.slice(0, maxWords).join(' ').trim();
+}
+
+/**
+ * Sanitize metadata output to enforce user preferences
+ * Enforces title length, description length, and keyword count limits
+ */
+export function sanitizeMetadataOutput(
+  metadata: { title: string; description: string; keywords: string[] },
+  settings: {
+    titleLength?: number;
+    descLength?: number;
+    keywordsCount?: number;
+  }
+): { title: string; description: string; keywords: string[] } {
+  // Default values if settings are missing
+  const titleLimit = settings.titleLength || 70;
+  const descLimit = settings.descLength || 160;
+  const keywordCount = settings.keywordsCount || 35;
+
+  console.log("Applied AI Preferences:", {
+    titleLength: titleLimit,
+    keywordsCount: keywordCount,
+    descriptionLength: descLimit
+  });
+
+  // Sanitize title
+  let sanitizedTitle = (metadata.title || '').trim();
+  sanitizedTitle = truncateByCharacters(sanitizedTitle, titleLimit);
+
+  // Sanitize description
+  let sanitizedDescription = (metadata.description || '').trim();
+  sanitizedDescription = truncateByCharacters(sanitizedDescription, descLimit);
+
+  // Sanitize keywords
+  let sanitizedKeywords = metadata.keywords || [];
+  
+  // Clean keywords: trim, remove empty, remove duplicates
+  sanitizedKeywords = sanitizedKeywords
+    .map(kw => kw.trim())
+    .filter(kw => kw.length > 0 && kw.length <= 50);
+  
+  // Remove duplicates (case-insensitive)
+  const seen = new Set<string>();
+  sanitizedKeywords = sanitizedKeywords.filter(kw => {
+    const lower = kw.toLowerCase();
+    if (seen.has(lower)) return false;
+    seen.add(lower);
+    return true;
+  });
+  
+  // Remove spam keywords
+  sanitizedKeywords = filterSpamKeywords(sanitizedKeywords);
+  
+  // Apply SEO optimization (includes sorting by commercial intent)
+  sanitizedKeywords = optimizeMicrostockKeywords(sanitizedKeywords, keywordCount);
+  
+  // Ensure exact keyword count
+  if (sanitizedKeywords.length > keywordCount) {
+    sanitizedKeywords = sanitizedKeywords.slice(0, keywordCount);
+  }
+
+  return {
+    title: sanitizedTitle,
+    description: sanitizedDescription,
+    keywords: sanitizedKeywords
+  };
+}
+
 // =========================================
 // EXISTING UTILITY FUNCTIONS
 // =========================================
