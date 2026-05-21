@@ -31,7 +31,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import ThemeSwitcher from './components/ThemeSwitcher';
 
 // Import Types and Constants
-import { AssetType, QueueItem, AuthProvider, TargetPlatforms, Metadata } from './types';
+import { AssetType, QueueItem, AuthProvider, TargetPlatforms, Metadata, ComplianceResult } from './types';
 import { 
   BANNED_TRADEMARKS, 
   TRENDING_KEYWORDS, 
@@ -53,7 +53,11 @@ import {
   truncateByWords,
   filterSpamKeywords,
   sanitizeKeywords,
-  applyUserPreferences
+  applyUserPreferences,
+  scanComplianceViolations,
+  sanitizeComplianceMetadata,
+  enforceCompliance,
+  COMPLIANCE_PROMPT_INSTRUCTIONS
 } from './utils';
 import { 
   MISTRAL_MODELS, 
