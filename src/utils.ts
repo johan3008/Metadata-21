@@ -119,6 +119,115 @@ export function filterSpamKeywords(keywords: string[]): string[] {
 }
 
 /**
+ * Sanitize keywords for microstock compliance
+ * - Remove special characters except alphanumeric and hyphens
+ * - Normalize to lowercase
+ * - Remove duplicates
+ * - Filter out forbidden technical terms
+ * - Ensure keyword length between 2-50 characters
+ */
+export function sanitizeKeywords(keywords: string[], maxCount: number = 35): string[] {
+  if (!keywords || keywords.length === 0) return [];
+
+  // Forbidden technical/medium indicators for microstock 2026
+  const FORBIDDEN_TERMS = [
+    '4k', '8k', 'hd', 'uhd', 'hdr', 'resolution', 'megapixel', 'mp',
+    'camera', 'dslr', 'canon', 'nikon', 'sony', 'fujifilm', 'panasonic',
+    'photography', 'photo', 'photograph', 'image', 'picture', 'pic',
+    'vector', 'illustration', 'clipart', 'eps', 'ai', 'svg', 'png', 'jpg', 'jpeg',
+    'ultra', 'high quality', 'best quality', 'masterpiece', 'render', '3d render',
+    'file', 'download', 'free', 'sample', 'preview', 'watermark'
+  ];
+
+  // Step 1: Clean and normalize each keyword
+  const cleaned = keywords
+    .map(kw => String(kw))
+    .map(kw => kw.trim())
+    .map(kw => kw.replace(/[^a-z0-9\s-]/gi, '')) // Remove special chars except alphanumeric and hyphen
+    .map(kw => kw.toLowerCase())
+    .map(kw => kw.replace(/\s+/g, ' ')) // Normalize multiple spaces to single space
+    .filter(kw => kw.length >= 2 && kw.length <= 50); // Enforce length limits
+
+  // Step 2: Remove forbidden terms
+  const filtered = cleaned.filter(kw => {
+    return !FORBIDDEN_TERMS.some(term => 
+      kw === term || kw.includes(term)
+    );
+  });
+
+  // Step 3: Remove duplicates (case-insensitive)
+  const unique = Array.from(new Set(filtered));
+
+  // Step 4: Limit to max count
+  return unique.slice(0, maxCount);
+}
+
+/**
+ * Apply user preferences to metadata output
+ * - Enforces title length limit
+ * - Enforces description length limit  
+ * - Enforces exact keyword count
+ * - Prioritizes key concepts if provided
+ */
+export function applyUserPreferences(
+  metadata: { title: string; description: string; keywords: string[] },
+  settings: {
+    titleLength?: number;
+    descLength?: number;
+    keywordsCount?: number;
+    keyConcepts?: string;
+  }
+): { title: string; description: string; keywords: string[] } {
+  const titleLimit = settings.titleLength || 70;
+  const descLimit = settings.descLength || 160;
+  const keywordCount = settings.keywordsCount || 35;
+  const keyConcepts = settings.keyConcepts?.split(',').map(c => c.trim().toLowerCase()).filter(Boolean) || [];
+
+  // Apply title truncation
+  let title = truncateByCharacters(metadata.title || '', titleLimit);
+
+  // Apply description truncation
+  let description = truncateByCharacters(metadata.description || '', descLimit);
+
+  // Apply keyword sanitization and count enforcement
+  let keywords = sanitizeKeywords(metadata.keywords || [], keywordCount);
+
+  // Prioritize key concepts by moving them to the front
+  if (keyConcepts.length > 0) {
+    const remainingKeywords = keywords.filter(kw => !keyConcepts.includes(kw));
+    const matchedConcepts = keyConcepts.filter(concept => 
+      keywords.some(kw => kw === concept || kw.includes(concept))
+    );
+    
+    // Add concepts that weren't found (optional fallback)
+    const unmatchedConcepts = keyConcepts.filter(concept => 
+      !matchedConcepts.includes(concept)
+    );
+    
+    keywords = [...matchedConcepts, ...remainingKeywords].slice(0, keywordCount);
+    
+    // If still under count, add back unmatched concepts as new keywords
+    if (keywords.length < keywordCount && unmatchedConcepts.length > 0) {
+      for (const concept of unmatchedConcepts) {
+        if (keywords.length >= keywordCount) break;
+        if (!keywords.includes(concept)) {
+          keywords.push(concept);
+        }
+      }
+    }
+  }
+
+  // Final trim to exact count
+  keywords = keywords.slice(0, keywordCount);
+
+  return {
+    title,
+    description,
+    keywords
+  };
+}
+
+/**
  * Detect commercial intent in keywords
  * Returns score 0-100 based on buyer intent strength
  */
