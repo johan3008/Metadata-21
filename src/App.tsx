@@ -924,17 +924,20 @@ OUTPUT RULES (WAJIB DIPATUHI):
 - Prioritize SEO-friendly commercial keywords
 
 IMPORTANT SEO RULES:
-- First 10 keywords must be highest search intent.
-- Prioritize long-tail keywords.
+- First 10 keywords must be highest search intent and most visually relevant.
+- Prioritize long-tail keywords (2-4 words ideal).
 - Avoid generic keywords like: food, delicious, aesthetic, tasty, yummy, beautiful, awesome, cool, nice, amazing.
 - Avoid spam keywords: beautiful, awesome, cool, nice, amazing, best quality, ultra hd, masterpiece, high quality, premium, luxury.
-- Keywords must be single words or two-word phrases only.
+- Keywords must be single words, two-word phrases, or long-tail phrases (max 5 words).
 - No technical specs like 4k, 8k, resolution, camera brand names.
-- Use commercial buyer intent keywords.
-- Only generate visually relevant keywords.
+- Use commercial buyer intent keywords (copy space, background, flat lay, top view if visually relevant).
+- Only generate visually relevant keywords that actually appear in the asset.
 - Do not generate broad generic tags.
 - Use Adobe Stock SEO structure.
 - Prioritize searchable phrases over artistic wording.
+- NO keyword stuffing or phrase looping (e.g., "rabbit flat lay rabbit top view" is FORBIDDEN).
+- Each keyword must be unique and semantically distinct.
+- Structure: mix of single keywords, two-word keywords, and long-tail keywords.
 `;
 
     let specificGuides = "";
