@@ -20,8 +20,170 @@ import {
 // =========================================
 
 /**
+ * TASK 1: Metadata Relationship System - Generate structured metadata framework
+ * Returns structured analysis of objects, scene flow, and commercial concepts
+ * This is the foundation for OBJECT → FLOW → CONCEPT keyword generation
+ */
+export interface MetadataStructure {
+  objects: string[];        // Physical objects visible in asset
+  flow: string[];           // Activities, actions, scenarios happening
+  concepts: string[];       // Commercial/business concepts
+}
+
+/**
+ * TASK 1: Generate Metadata Structure from visual analysis
+ * Creates the foundation for relevant keyword generation
+ */
+export function generateMetadataStructure(
+  visualDescription: string,
+  detectedObjects?: string[],
+  detectedActions?: string[]
+): MetadataStructure {
+  const lowerDesc = (visualDescription || '').toLowerCase();
+  
+  const result: MetadataStructure = {
+    objects: [],
+    flow: [],
+    concepts: []
+  };
+
+  // === TASK 2: OBJECT DETECTION ===
+  // Objects must be physically visible in the asset
+  if (detectedObjects && detectedObjects.length > 0) {
+    result.objects = detectedObjects
+      .filter(obj => obj.trim().length > 0)
+      .map(obj => obj.toLowerCase().trim());
+  } else {
+    // Extract object nouns from description
+    const objectPatterns = [
+      // People/roles
+      'man', 'woman', 'child', 'boy', 'girl', 'person', 'people', 'team', 'group',
+      'businessman', 'businesswoman', 'worker', 'student', 'teacher', 'doctor',
+      'chef', 'artist', 'designer', 'developer', 'engineer', 'scientist',
+      // Common objects
+      'table', 'desk', 'chair', 'laptop', 'computer', 'phone', 'smartphone',
+      'document', 'paper', 'book', 'pen', 'pencil', 'cup', 'glass', 'bottle',
+      'bag', 'box', 'container', 'tool', 'device', 'machine', 'equipment',
+      'building', 'office', 'room', 'window', 'door', 'wall', 'floor',
+      'tree', 'plant', 'flower', 'leaf', 'grass', 'sky', 'cloud', 'sun',
+      'car', 'vehicle', 'bike', 'road', 'street', 'bridge',
+      'food', 'fruit', 'vegetable', 'meal', 'dish', 'ingredient',
+      'clothing', 'shirt', 'dress', 'shoe', 'hat', 'glasses', 'watch',
+      'animal', 'dog', 'cat', 'bird', 'fish', 'horse', 'cow', 'sheep'
+    ];
+    
+    const foundObjects: string[] = [];
+    objectPatterns.forEach(pattern => {
+      const regex = new RegExp(`\\b${pattern}\\b`, 'i');
+      if (regex.test(lowerDesc) && !foundObjects.includes(pattern)) {
+        foundObjects.push(pattern);
+      }
+    });
+    result.objects = foundObjects;
+  }
+
+  // === TASK 3: FLOW DETECTION ===
+  // Flow = activities, actions, scenarios happening in the asset
+  const actionPatterns: Record<string, string[]> = {
+    // Business/Office actions
+    'analysis': ['analyze', 'analyzing', 'examine', 'examining', 'study', 'studying', 'review', 'reviewing'],
+    'audit': ['audit', 'auditing', 'inspect', 'inspecting', 'check', 'checking', 'verify', 'verifying'],
+    'reading': ['read', 'reading', 'look', 'looking', 'view', 'viewing'],
+    'writing': ['write', 'writing', 'type', 'typing', 'note', 'noting', 'document', 'documenting'],
+    'meeting': ['meet', 'meeting', 'discuss', 'discussing', 'talk', 'talking', 'present', 'presenting'],
+    'planning': ['plan', 'planning', 'strategy', 'strategizing', 'organize', 'organizing'],
+    'working': ['work', 'working', 'operate', 'operating', 'use', 'using', 'handle', 'handling'],
+    'creating': ['create', 'creating', 'design', 'designing', 'build', 'building', 'make', 'making'],
+    'calculating': ['calculate', 'calculating', 'compute', 'computing', 'measure', 'measuring'],
+    'searching': ['search', 'searching', 'find', 'finding', 'explore', 'exploring'],
+    // Lifestyle actions
+    'walking': ['walk', 'walking', 'run', 'running', 'jog', 'jogging', 'move', 'moving'],
+    'sitting': ['sit', 'sitting', 'stand', 'standing', 'lie', 'lying', 'rest', 'resting'],
+    'eating': ['eat', 'eating', 'drink', 'drinking', 'cook', 'cooking', 'prepare', 'preparing'],
+    'shopping': ['shop', 'shopping', 'buy', 'buying', 'sell', 'selling', 'purchase', 'purchasing'],
+    'exercising': ['exercise', 'exercising', 'train', 'training', 'lift', 'lifting', 'stretch', 'stretching'],
+    'relaxing': ['relax', 'relaxing', 'sleep', 'sleeping', 'meditate', 'meditating', 'yoga'],
+    'playing': ['play', 'playing', 'game', 'gaming', 'sport', 'sports', 'compete', 'competing'],
+    'traveling': ['travel', 'traveling', 'fly', 'flying', 'drive', 'driving', 'ride', 'riding'],
+    // Creative actions
+    'painting': ['paint', 'painting', 'draw', 'drawing', 'sketch', 'sketching', 'illustrate', 'illustrating'],
+    'photographing': ['photograph', 'photographing', 'shoot', 'shooting', 'capture', 'capturing'],
+    'performing': ['perform', 'performing', 'sing', 'singing', 'dance', 'dancing', 'act', 'acting']
+  };
+
+  Object.entries(actionPatterns).forEach(([action, keywords]) => {
+    if (keywords.some(kw => lowerDesc.includes(kw))) {
+      result.flow.push(action);
+    }
+  });
+
+  // Add generic flow descriptors based on context
+  if (lowerDesc.includes('process') || lowerDesc.includes('progress')) {
+    result.flow.push('progression');
+  }
+  if (lowerDesc.includes('change') || lowerDesc.includes('transform')) {
+    result.flow.push('transformation');
+  }
+  if (lowerDesc.includes('growth') || lowerDesc.includes('increase')) {
+    result.flow.push('growth');
+  }
+  if (lowerDesc.includes('connection') || lowerDesc.includes('network')) {
+    result.flow.push('connectivity');
+  }
+
+  // === TASK 4: CONCEPT DETECTION ===
+  // Commercial/business concepts for buyer intent
+  const conceptPatterns: Record<string, string[]> = {
+    // Business concepts
+    'finance': ['finance', 'financial', 'money', 'bank', 'investment', 'invest', 'profit', 'revenue'],
+    'accounting': ['accounting', 'account', 'budget', 'tax', 'expense', 'income', 'balance'],
+    'compliance': ['compliance', 'regulation', 'legal', 'law', 'rule', 'policy', 'standard'],
+    'management': ['management', 'manage', 'manager', 'leadership', 'lead', 'supervise', 'direct'],
+    'strategy': ['strategy', 'strategic', 'plan', 'planning', 'goal', 'objective', 'target'],
+    'marketing': ['marketing', 'market', 'advertise', 'advertisement', 'promotion', 'promote', 'brand'],
+    'sales': ['sales', 'sell', 'customer', 'client', 'consumer', 'buyer', 'purchase'],
+    'technology': ['technology', 'tech', 'digital', 'software', 'hardware', 'system', 'platform'],
+    'innovation': ['innovation', 'innovative', 'new', 'modern', 'future', 'advanced', 'cutting-edge'],
+    'communication': ['communication', 'communicate', 'connect', 'network', 'social', 'message'],
+    'education': ['education', 'learn', 'learning', 'teach', 'teaching', 'school', 'university', 'knowledge'],
+    'healthcare': ['healthcare', 'health', 'medical', 'medicine', 'hospital', 'clinic', 'wellness'],
+    'environment': ['environment', 'eco', 'green', 'sustainable', 'renewable', 'climate', 'nature'],
+    'diversity': ['diversity', 'inclusive', 'inclusion', 'multicultural', 'global', 'international'],
+    'success': ['success', 'achieve', 'achievement', 'win', 'winner', 'accomplish', 'triumph'],
+    'teamwork': ['teamwork', 'team', 'collaboration', 'collaborate', 'cooperation', 'cooperate', 'together'],
+    'productivity': ['productivity', 'efficient', 'efficiency', 'performance', 'optimize', 'optimization'],
+    'security': ['security', 'secure', 'protect', 'protection', 'safety', 'safe', 'privacy'],
+    'data': ['data', 'analytics', 'analysis', 'statistics', 'chart', 'graph', 'report'],
+    'quality': ['quality', 'premium', 'professional', 'excellence', 'standard', 'certification']
+  };
+
+  Object.entries(conceptPatterns).forEach(([concept, keywords]) => {
+    if (keywords.some(kw => lowerDesc.includes(kw))) {
+      result.concepts.push(concept);
+    }
+  });
+
+  // Ensure at least some commercial concepts for buyer intent
+  if (result.concepts.length === 0) {
+    // Default commercial concepts based on common use cases
+    if (result.objects.some(o => ['laptop', 'computer', 'office', 'desk'].includes(o))) {
+      result.concepts.push('business', 'technology');
+    } else if (result.objects.some(o => ['food', 'fruit', 'vegetable', 'meal'].includes(o))) {
+      result.concepts.push('lifestyle', 'wellness');
+    } else if (result.objects.some(o => ['person', 'people', 'man', 'woman'].includes(o))) {
+      result.concepts.push('lifestyle', 'human');
+    } else {
+      result.concepts.push('commercial', 'general');
+    }
+  }
+
+  return result;
+}
+
+/**
  * TASK 1: Metadata Intelligence System - Analyze visual intent
  * Returns structured analysis of objects, scene flow, and commercial concepts
+ * Legacy function - now uses generateMetadataStructure internally
  */
 export interface MetadataIntentAnalysis {
   objects: string[];        // Main objects detected in asset
@@ -33,79 +195,14 @@ export function analyzeMetadataIntent(
   visualDescription: string,
   detectedObjects?: string[]
 ): MetadataIntentAnalysis {
-  const lowerDesc = (visualDescription || '').toLowerCase();
+  // Use the new structured approach
+  const structure = generateMetadataStructure(visualDescription, detectedObjects);
   
-  const result: MetadataIntentAnalysis = {
-    objects: [],
-    sceneFlow: [],
-    commercialConcept: []
+  return {
+    objects: structure.objects,
+    sceneFlow: structure.flow,
+    commercialConcept: structure.concepts
   };
-
-  // Extract objects from visual description or detected objects
-  if (detectedObjects && detectedObjects.length > 0) {
-    result.objects = detectedObjects.filter(obj => obj.trim().length > 0);
-  } else {
-    // Fallback: extract noun-like words from description
-    const objectCandidates = lowerDesc.match(/\b[a-z]{3,15}\b/g) || [];
-    result.objects = objectCandidates.slice(0, 10);
-  }
-
-  // Detect scene flow / scenario
-  const sceneIndicators: Record<string, string[]> = {
-    easter: ['easter', 'bunny', 'rabbit', 'egg', 'basket', 'spring'],
-    spring: ['spring', 'flower', 'bloom', 'garden', 'fresh'],
-    christmas: ['christmas', 'santa', 'tree', 'ornament', 'snow', 'holiday'],
-    halloween: ['halloween', 'pumpkin', 'ghost', 'spooky', 'costume'],
-    birthday: ['birthday', 'cake', 'candle', 'party', 'celebration'],
-    wedding: ['wedding', 'bride', 'groom', 'ring', 'ceremony'],
-    business: ['business', 'office', 'meeting', 'corporate', 'professional'],
-    food: ['food', 'meal', 'dish', 'ingredient', 'cooking', 'recipe'],
-    nature: ['nature', 'landscape', 'outdoor', 'scenic', 'environment'],
-    technology: ['technology', 'digital', 'device', 'screen', 'interface']
-  };
-
-  Object.entries(sceneIndicators).forEach(([scene, keywords]) => {
-    if (keywords.some(kw => lowerDesc.includes(kw))) {
-      result.sceneFlow.push(scene);
-    }
-  });
-
-  // Add generic scene descriptors based on composition
-  if (lowerDesc.includes('white background') || lowerDesc.includes('isolated')) {
-    result.sceneFlow.push('studio setup');
-  }
-  if (lowerDesc.includes('flat lay') || lowerDesc.includes('top view')) {
-    result.sceneFlow.push('overhead composition');
-  }
-  if (lowerDesc.includes('lifestyle') || lowerDesc.includes('people')) {
-    result.sceneFlow.push('lifestyle scenario');
-  }
-
-  // Detect commercial concepts
-  const commercialIndicators: Record<string, string[]> = {
-    'copy space': ['copy space', 'empty space', 'text space', 'negative space'],
-    'isolated': ['isolated', 'cut out', 'white background', 'transparent'],
-    'background': ['background', 'backdrop', 'wallpaper', 'pattern'],
-    'template': ['template', 'layout', 'design element', 'mockup'],
-    'advertising': ['advertising', 'commercial', 'marketing', 'promotional'],
-    'banner': ['banner', 'header', 'web banner', 'social media'],
-    'flat lay': ['flat lay', 'top view', 'overhead', 'knolling'],
-    'minimal': ['minimal', 'minimalist', 'clean', 'simple'],
-    'conceptual': ['concept', 'symbolic', 'metaphor', 'abstract idea']
-  };
-
-  Object.entries(commercialIndicators).forEach(([concept, keywords]) => {
-    if (keywords.some(kw => lowerDesc.includes(kw))) {
-      result.commercialConcept.push(concept);
-    }
-  });
-
-  // Ensure at least some commercial concepts for buyer intent
-  if (result.commercialConcept.length === 0) {
-    result.commercialConcept.push('commercial use');
-  }
-
-  return result;
 }
 
 /**
@@ -441,20 +538,21 @@ export const COMPLIANCE_PROMPT_INSTRUCTIONS = `COMPLIANCE RULES - MANDATORY FOR 
 // =========================================
 
 // Commercial keywords with high buyer intent (priority order)
+// TASK 5: Composition keywords removed - only use when visually detected
 const COMMERCIAL_KEYWORDS = [
   'copy space',
   'background',
   'banner',
   'template',
-  'flat lay',
-  'top view',
   'commercial',
   'advertising',
   'mockup'
 ];
 
 // Spam/low-value keywords blacklist for microstock 2026 - EXPANDED
+// TASK 5: Added composition spam keywords that should not be used unless visually detected
 const SPAM_KEYWORDS_BLACKLIST = [
+  // Generic adjectives with low buyer intent
   'food', 'delicious', 'aesthetic', 'tasty', 'yummy',
   'beautiful', 'awesome', 'cool', 'nice', 'amazing',
   'best quality', 'masterpiece', 'ultra hd',
@@ -491,7 +589,13 @@ const SPAM_KEYWORDS_BLACKLIST = [
   'big', 'small', 'large', 'tiny', 'huge', 'massive',
   'little', 'great', 'good', 'bad', 'fine', 'okay',
   'lovely', 'pretty', 'handsome', 'ugly', 'plain',
-  'fancy', 'simple', 'complex', 'easy', 'difficult'
+  'fancy', 'simple', 'complex', 'easy', 'difficult',
+  // TASK 5: Composition spam keywords - AUTO REMOVE unless visually detected
+  'flat lay', 'top view', 'overhead', 'knolling',
+  'scenic', 'environment', 'composition', 'minimal composition',
+  'bird eye view', 'aerial view', 'drone shot',
+  'close up', 'macro', 'wide angle', 'panoramic',
+  'studio shot', 'product shot', 'lifestyle shot'
 ];
 
 // Weak adjective filter for single keyword mode - TASK 7 ENHANCED
@@ -549,12 +653,9 @@ const AI_GENERIC_TAGS_BLACKLIST = [
 const ALLOWED_MULTI_WORD_PHRASES = [
   'white background',
   'copy space',
-  'flat lay',
-  'top view',
-  'overhead view',
+  // TASK 5: Composition keywords only allowed when visually detected
+  // These are kept here for cases where they are genuinely relevant
   'isolated background',
-  'studio shot',
-  'product shot',
   'commercial use',
   'advertising campaign',
   'social media',
