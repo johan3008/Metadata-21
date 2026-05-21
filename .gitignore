@@ -1,3 +1,82 @@
 ```
+# Build artifacts
+dist/
+*.css
+*.js
+*.map
+*.cjs
+
+# Dependencies
 node_modules/
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Logs
+*.log
+
+# Editors
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Temporary files
+*.tmp
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Coverage reports
+coverage/
+htmlcov/
+*.coverage
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Pytest cache
+.pytest_cache/
+
+# Mypy cache
+.mypy_cache/
+
+# Virtual environments
+venv/
+.venv/
+ENV/
+
+# IDE specific
+.vscode/
+.idea/
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# Local configuration
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 ```

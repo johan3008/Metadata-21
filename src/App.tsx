@@ -46,7 +46,12 @@ import {
   measureSEOQuality, 
   resizeAndCompressImage, 
   extractVideoFrames, 
-  generatePlatformCSV 
+  generatePlatformCSV,
+  sanitizeMetadataOutput,
+  optimizeMicrostockKeywords,
+  truncateByCharacters,
+  truncateByWords,
+  filterSpamKeywords
 } from './utils';
 
 export default function App() {
@@ -736,7 +741,7 @@ export default function App() {
     }, 1500);
   };
 
-  // System instructions Builder
+  // System instructions Builder with dynamic AI preference rules
   const buildPromptInstructions = (item: QueueItem) => {
     const platformsStr = Object.keys(targetPlatforms)
       .filter(p => targetPlatforms[p as keyof TargetPlatforms])
@@ -747,6 +752,19 @@ export default function App() {
     const minD = Math.floor(item.settings.descLength * 0.8);
     const maxD = Math.ceil(item.settings.descLength * 1.2);
     const kwTarget = item.settings.keywordsCount;
+
+    // Dynamic output rules based on user preferences
+    const dynamicRules = `
+OUTPUT RULES (WAJIB DIPATUHI):
+- Maximum title length: ${item.settings.titleLength} characters (HARD LIMIT)
+- Generate exactly ${kwTarget} keywords (NO MORE, NO LESS)
+- Maximum description length: ${item.settings.descLength} characters (HARD LIMIT)
+- Prioritize SEO-friendly commercial keywords
+- First 10 keywords must be highest search intent
+- Avoid spam keywords: beautiful, awesome, cool, nice, amazing, best quality, ultra hd, masterpiece
+- Keywords must be single words or two-word phrases only
+- No technical specs like 4k, 8k, resolution, camera brand names
+`;
 
     let specificGuides = "";
     if (item.type === 'video') {
@@ -784,10 +802,10 @@ TARGET AGENSI: ${platformsStr || 'Shutterstock, Adobe Stock, Freepik, Canva'}
 
 MISI:
 Buatlah judul komersial yang komprehensif, deskripsi kreatif yang memikat, klasifikasi kategori per platform, serta tag kata kunci ramah mesin pencari yang sepenuhnya "GROUNDED" (berpijak nyata) pada aset ini.
-
+${dynamicRules}
 ATURAN METADATA 100% SUKSES:
-1. JUDUL SEO: Wajib mengandung formula 3-Layer: [Elemen fisik nyata] + [Aksi / Alur cerita] + [Makna komersial / Niche]. Panjang harus ${minT}-${maxT} karakter.
-2. DESKRIPSI: Ceritakan alur visual gambar secara natural dan menarik bagi pembeli antara ${minD}-${maxD} karakter.
+1. JUDUL SEO: Wajib mengandung formula 3-Layer: [Elemen fisik nyata] + [Aksi / Alur cerita] + [Makna komersial / Niche]. Panjang HARUS ${minT}-${maxT} karakter (STRICT).
+2. DESKRIPSI: Ceritakan alur visual gambar secara natural dan menarik bagi pembeli antara ${minD}-${maxD} karakter (STRICT).
 3. KATA KUNCI (KEYWORDS): Hasilkan TEPAT ${kwTarget} kata kunci unik. No spasi (single keywords).
    - Urutan 1-10: Subjek & visual dominan nyata yang terlihat di frame.
    - Urutan 11-25: Aksi, gerak tubuh, emosi, warna, pencahayaan.
@@ -805,9 +823,9 @@ ${specificGuides}
 
 OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
 {
-  "title": "Judul 3-Layer Bahasa Inggris padat SEO, panjang sekitar ${item.settings.titleLength} karakter",
-  "description": "Deskripsi kreatif Bahasa Inggris berbobot komersial, panjang sekitar ${item.settings.descLength} karakter",
-  "keywords": [sekumpulan kata kunci tunggal dipisah koma sejumlah tepat ${kwTarget} elemen unik],
+  "title": "Judul 3-Layer Bahasa Inggris padat SEO, panjang SEKITAR ${item.settings.titleLength} karakter (MAX ${maxT})",
+  "description": "Deskripsi kreatif Bahasa Inggris berbobot komersial, panjang SEKITAR ${item.settings.descLength} karakter (MAX ${maxD})",
+  "keywords": [TEPAT ${kwTarget} kata kunci unik, dipisah koma, NO SPAM],
   "categories": {
     "shutterstock1": "Kategori ke-1",
     "shutterstock2": "Kategori ke-2 berbeda",
@@ -819,35 +837,37 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
 }`;
   };
 
-  // POST PROCESSING: Validate and Repair output payload structures
+  // POST PROCESSING: Validate and Repair output payload structures with preference enforcement
   const repairParsedOutput = (parsed: any, settings: any, fileName: string): Metadata => {
-    // 1. Repair Title
+    // 1. Repair Title - enforce strict character limit
     let repairedTitle = (parsed?.title || '').toString().trim();
-    const minT = Math.floor(settings.titleLength * 0.8);
-    const maxT = Math.ceil(settings.titleLength * 1.2);
+    const titleLimit = settings.titleLength || 70;
+    const minT = Math.floor(titleLimit * 0.8);
+    const maxT = Math.ceil(titleLimit * 1.2);
 
     if (repairedTitle.length < minT) {
       const suffixes = [" for commercial lifestyle use", " designed with creative concepts", " perfect for advertising design", " ideal for social media contents", " in high quality modern style"];
       const hash = fileName ? fileName.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) : Date.now();
       repairedTitle += suffixes[hash % suffixes.length];
     }
-    if (repairedTitle.length > maxT) {
-      repairedTitle = repairedTitle.substring(0, maxT).trim();
-    }
+    
+    // Use sanitize function for natural truncation
+    repairedTitle = truncateByCharacters(repairedTitle, titleLimit);
 
-    // 2. Repair Description
+    // 2. Repair Description - enforce strict character limit
     let repairedDesc = (parsed?.description || '').toString().trim();
-    const minD = Math.floor(settings.descLength * 0.8);
-    const maxD = Math.ceil(settings.descLength * 1.2);
+    const descLimit = settings.descLength || 160;
+    const minD = Math.floor(descLimit * 0.8);
+    const maxD = Math.ceil(descLimit * 1.2);
 
     if (repairedDesc.length < minD) {
       repairedDesc += " Highly recommended for graphic designers, digital marketers, and agencies looking for premium microstock assets.";
     }
-    if (repairedDesc.length > maxD) {
-      repairedDesc = repairedDesc.substring(0, maxD).trim();
-    }
+    
+    // Use sanitize function for natural truncation
+    repairedDesc = truncateByCharacters(repairedDesc, descLimit);
 
-    // 3. Repair Keywords
+    // 3. Repair Keywords - enforce exact count and SEO optimization
     let kws: string[] = [];
     if (Array.isArray(parsed?.keywords)) {
       kws = parsed.keywords;
@@ -872,7 +892,15 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
     const forbidden = ["4k", "hd", "8k", "ultra", "camera", "dslr", "megapixel", "canon", "nikon", "sony", "photography", "photo", "vector", "illustration"];
     uniqueKws = uniqueKws.filter(k => !forbidden.some(word => k.toLowerCase().includes(word)));
 
-    const expectedCount = settings.keywordsCount;
+    // Remove spam keywords using filterSpamKeywords
+    uniqueKws = filterSpamKeywords(uniqueKws);
+
+    const expectedCount = settings.keywordsCount || 35;
+    
+    // Apply SEO optimization which includes sorting by commercial intent
+    uniqueKws = optimizeMicrostockKeywords(uniqueKws, expectedCount);
+    
+    // Fill with backup keywords if still under target
     if (uniqueKws.length < expectedCount) {
       const backupKws = ["background", "design", "element", "concept", "abstract", "commercial", "asset", "contemporary", "creative", "clean", "minimalist", "modern", "lifestyle", "composition", "presentation"];
       for (const b of backupKws) {
@@ -881,11 +909,12 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
           uniqueKws.push(b);
         }
       }
-    } else if (uniqueKws.length > expectedCount) {
-      uniqueKws = uniqueKws.slice(0, expectedCount);
     }
+    
+    // Final trim to exact count
+    uniqueKws = uniqueKws.slice(0, expectedCount);
 
-    // Ensure key concepts
+    // Ensure key concepts are prioritized
     if (settings.keyConcepts) {
       const concepts = settings.keyConcepts.toLowerCase().split(',').map(c => c.trim()).filter(Boolean);
       concepts.forEach(concept => {
@@ -899,6 +928,24 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
         }
       });
       uniqueKws = uniqueKws.slice(0, expectedCount);
+    }
+
+    // Final validation against preferences
+    console.log("Applied AI Preferences:", {
+      titleLength: titleLimit,
+      keywordsCount: expectedCount,
+      descriptionLength: descLimit
+    });
+
+    // Validation checks
+    if (repairedTitle.length > titleLimit) {
+      console.warn(`Title exceeded limit: ${repairedTitle.length} > ${titleLimit}`);
+    }
+    if (repairedDesc.length > descLimit) {
+      console.warn(`Description exceeded limit: ${repairedDesc.length} > ${descLimit}`);
+    }
+    if (uniqueKws.length !== expectedCount) {
+      console.warn(`Keyword count mismatch: ${uniqueKws.length} !== ${expectedCount}`);
     }
 
     return {
