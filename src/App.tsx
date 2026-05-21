@@ -231,8 +231,8 @@ export default function App() {
   };
 
   // Extract non-blank keys
-  const getActiveKeys = (provider: 'gemini' | 'groq'): string[] => {
-    const arr = provider === 'gemini' ? geminiKeys : groqKeys;
+  const getActiveKeys = (provider: 'gemini' | 'groq' | 'mistral'): string[] => {
+    const arr = provider === 'gemini' ? geminiKeys : provider === 'groq' ? groqKeys : mistralKeys;
     return arr.map(k => k.trim()).filter(k => k.length > 5);
   };
 
@@ -2137,8 +2137,8 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
                       )}
 
                     {/* Engine Source Selection Tabs */}
-                    <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-2xl mb-4 text-center">
-                      {(['gemini', 'groq', 'helper'] as AuthProvider[]).map((p) => {
+                    <div className="grid grid-cols-4 gap-1 bg-slate-100 p-1 rounded-2xl mb-4 text-center">
+                      {(['gemini', 'groq', 'mistral', 'helper'] as AuthProvider[]).map((p) => {
                         const isTabActive = activeAuthProvider === p;
                         return (
                           <button
@@ -2151,7 +2151,7 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
                                 : 'text-slate-500 hover:text-slate-900'
                             }`}
                           >
-                            {p === 'gemini' ? '🔮 Gemini' : p === 'groq' ? '⚡ Groq' : 'Bantuan'}
+                            {p === 'gemini' ? '🔮 Gemini' : p === 'groq' ? '⚡ Groq' : p === 'mistral' ? '🌟 Mistral' : 'Bantuan'}
                           </button>
                         );
                       })}
@@ -2556,6 +2556,220 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
                       </div>
                     )}
 
+                    {/* Mistral Config Tab View */}
+                    {activeAuthProvider === 'mistral' && (
+                      <div className="space-y-4">
+                        
+                        {/* Visual API Vault Box Accordion */}
+                        <div className="border border-slate-200 rounded-2xl overflow-hidden bg-slate-50/50">
+                          <div 
+                            onClick={() => setIsMistralVaultOpen(!isMistralVaultOpen)}
+                            className="flex items-center justify-between p-3.5 bg-slate-100/50 hover:bg-slate-100 cursor-pointer transition-colors border-b border-slate-200"
+                          >
+                            <span className="text-xs font-extrabold text-slate-700 flex items-center">
+                              <CheckCircle2 className="w-4 h-4 mr-2 text-violet-500" />
+                              Vault Key Mistral ({getActiveKeys('mistral').length}/5)
+                            </span>
+                            <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${isMistralVaultOpen ? 'rotate-180' : ''}`} />
+                          </div>
+
+                          <AnimatePresence>
+                            {isMistralVaultOpen && (
+                              <motion.div 
+                                initial={{ height: 0 }}
+                                animate={{ height: 'auto' }}
+                                exit={{ height: 0 }}
+                                className="overflow-hidden bg-white p-4 space-y-3 border-t border-slate-100"
+                              >
+                                {mistralKeys.map((k, idx) => (
+                                  <div key={`mistral-key-${idx}`} className="relative">
+                                    <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-[10px] font-bold text-slate-400">
+                                      #{idx + 1}
+                                    </span>
+                                    <input
+                                      type="password"
+                                      value={k}
+                                      onChange={(e) => handleMistralKeyChange(idx, e.target.value)}
+                                      placeholder={`Masukkan Kunci Mistral Ke-${idx + 1}`}
+                                      className="w-full text-xs pl-8 pr-3 py-3 border border-slate-200 rounded-xl focus:outline-none focus:border-violet-500 font-mono bg-slate-50/50 hover:bg-white focus:bg-white transition-colors"
+                                    />
+                                  </div>
+                                ))}
+
+                                {/* Diagnose Testing Buttons */}
+                                <div className="flex flex-col space-y-2 mt-3 pt-2.5 border-t border-slate-100">
+                                  <div className="flex items-center justify-between">
+                                    <button
+                                      type="button"
+                                      disabled={testMistralStatus === 'testing'}
+                                      onClick={testMistralConn}
+                                      className="px-3 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl text-[10px] font-bold transition-all flex items-center space-x-1.5 active:scale-95"
+                                    >
+                                      {testMistralStatus === 'testing' ? (
+                                        <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin text-violet-500" />
+                                      ) : (
+                                        <CheckCircle2 className="w-3.5 h-3.5 mr-1.5 text-violet-500" />
+                                      )}
+                                      <span>Uji Koneksi Kunci</span>
+                                    </button>
+                                    <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full border shadow-sm ${
+                                      testMistralStatus === 'success' ? 'bg-emerald-100 text-emerald-800 border-emerald-200' :
+                                      testMistralStatus === 'err' ? 'bg-rose-100 text-rose-700 border-rose-200' :
+                                      testMistralStatus === 'testing' ? 'bg-violet-100 text-violet-700 border-violet-200 animate-pulse' :
+                                      'bg-slate-100 text-slate-500 border-slate-200'
+                                    }`}>
+                                      {testMistralStatus === 'success' ? 'Connected' : testMistralStatus === 'err' ? 'Invalid Key' : testMistralStatus === 'testing' ? 'Testing...' : 'Belum diuji'}
+                                    </span>
+                                  </div>
+                                  <div className={`text-[11px] leading-relaxed break-words whitespace-pre-wrap p-2.5 rounded-xl ${
+                                    testMistralStatus === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100 font-semibold' :
+                                    testMistralStatus === 'err' ? 'bg-rose-50 text-rose-600 border border-rose-100 font-semibold text-xs' : 'text-slate-500 bg-slate-50 border border-slate-100'
+                                  }`}>
+                                    {testMistralMsg}
+                                  </div>
+
+                                  {/* Rincian Diagnosa Berbagai Model Mistral */}
+                                  {Object.keys(mistralDiagnostics).length > 0 && (
+                                    <div className="mt-2.5 space-y-2 bg-slate-50 border border-slate-150 p-3 rounded-2xl">
+                                      <div className="text-[9px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center justify-between">
+                                        <span>Status Koneksi per Model</span>
+                                        <span className="text-violet-600 font-mono">Mistral Engine</span>
+                                      </div>
+                                      
+                                      {Object.entries(mistralDiagnostics).map(([slotIdxStr, modelsRecord]) => {
+                                        const slotIdx = parseInt(slotIdxStr);
+                                        const keySnippet = mistralKeys[slotIdx]?.trim() || '';
+                                        const shortKey = keySnippet.length > 8 ? `${keySnippet.slice(0, 4)}...${keySnippet.slice(-4)}` : 'Sandi';
+
+                                        return (
+                                          <div key={`mistral-dia-slot-${slotIdx}`} className="bg-white rounded-xl border border-slate-100 p-2.5 space-y-1.5 shadow-sm">
+                                            <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                                              <span className="text-[10px] font-extrabold text-slate-700 flex items-center">
+                                                <span className="inline-block w-1.5 h-1.5 rounded-full bg-violet-500 mr-1.5"></span>
+                                                Kunci #{slotIdx + 1}
+                                              </span>
+                                              
+                                              {/* Overall Key Status Summary Badge */}
+                                              {(() => {
+                                                const diags = Object.values(modelsRecord);
+                                                const hasSuccess = diags.some(d => d.status === 'success');
+                                                const hasRateLimit = diags.some(d => d.status === 'rate_limit');
+                                                const hasTesting = diags.some(d => d.status === 'testing');
+                                                const allWrong = diags.length > 0 && diags.every(d => d.status === 'error');
+                                                
+                                                let badgeText = 'Antre...';
+                                                let badgeClass = 'bg-slate-50 text-slate-500 border-slate-200';
+                                                
+                                                if (hasSuccess) {
+                                                  badgeText = 'AKTIF & READY';
+                                                  badgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-200';
+                                                } else if (hasRateLimit) {
+                                                  badgeText = 'LIMIT KUOTA (429)';
+                                                  badgeClass = 'bg-amber-100 text-amber-800 border-amber-200 animate-pulse';
+                                                } else if (hasTesting) {
+                                                  badgeText = 'MENGECEK...';
+                                                  badgeClass = 'bg-violet-100 text-violet-800 border-violet-200 animate-pulse';
+                                                } else if (allWrong) {
+                                                  badgeText = 'KUNCI SALAH';
+                                                  badgeClass = 'bg-rose-100 text-rose-800 border-rose-200';
+                                                } else if (diags.length > 0) {
+                                                  badgeText = 'BLOKIR / TDK COCOK';
+                                                  badgeClass = 'bg-slate-100 text-slate-700 border-slate-300';
+                                                }
+                                                
+                                                return (
+                                                  <span className={`text-[8.5px] font-extrabold px-2 py-0.5 rounded-full border shadow-sm shrink-0 ${badgeClass}`}>
+                                                    {badgeText}
+                                                  </span>
+                                                );
+                                              })()}
+
+                                              <span className="text-[9px] font-mono text-slate-400 font-semibold bg-slate-50 px-1.5 py-0.5 rounded border border-slate-150">
+                                                {shortKey}
+                                              </span>
+                                            </div>
+                                            
+                                            <div className="grid grid-cols-1 gap-1">
+                                              {Object.entries(modelsRecord).map(([modelName, diag]) => {
+                                                let badgeColor = 'bg-slate-50 text-slate-500 border-slate-150';
+                                                if (diag.status === 'success') badgeColor = 'bg-emerald-50 text-emerald-700 border-emerald-100';
+                                                else if (diag.status === 'rate_limit') badgeColor = 'bg-amber-50 text-amber-600 border-amber-100';
+                                                else if (diag.status === 'not_supported') badgeColor = 'bg-slate-50 text-slate-400 border-slate-200';
+                                                else if (diag.status === 'testing') badgeColor = 'bg-violet-50 text-violet-600 border-violet-100 animate-pulse';
+                                                else if (diag.status === 'error') badgeColor = 'bg-rose-50 text-rose-600 border-rose-100';
+
+                                                return (
+                                                  <div key={modelName} className="flex items-center justify-between text-[10px] py-1 border-b border-dashed border-slate-50 last:border-0">
+                                                    <span className="font-mono text-slate-500 font-semibold truncate">{modelName}</span>
+                                                    <span className={`px-2 py-0.5 rounded-lg border text-[8px] font-bold shrink-0 shadow-sm ${badgeColor}`}>
+                                                      {diag.message}
+                                                    </span>
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+
+                        {/* Mistral Model List Checks */}
+                        <div className="space-y-2">
+                          <label className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">
+                            Model Prioritas Mistral
+                          </label>
+                          <div className="space-y-1.5 bg-slate-50 p-3 rounded-2xl border border-slate-200 font-medium">
+                            {[
+                              { model: 'mistral-small-4', badge: 'Fast', desc: 'Optimal balance of speed and intelligence.' },
+                              { model: 'mistral-medium-3.5', badge: 'Best', desc: 'Highest quality for complex reasoning tasks.' },
+                              { model: 'devstral-2', badge: 'Reasoning', desc: 'Advanced reasoning and code generation.' },
+                              { model: 'codestral', badge: 'Coding', desc: 'Specialized for code completion and generation.' },
+                              { model: 'ministral-8b', badge: 'Light', desc: 'Efficient model for lightweight tasks.' },
+                              { model: 'ministral-3b', badge: 'Ultra Lite', desc: 'Ultra-fast model for simple queries.' }
+                            ].map(({ model, badge, desc }) => (
+                              <label 
+                                key={model} 
+                                className="flex flex-col text-xs font-semibold text-slate-700 cursor-pointer p-2 hover:bg-slate-200/40 rounded-xl transition-all border border-transparent hover:border-slate-100"
+                              >
+                                <div className="flex items-center space-x-2.5">
+                                  <input
+                                    type="radio"
+                                    name="mistralModel"
+                                    checked={selectedMistralModel === model}
+                                    onChange={() => setSelectedMistralModel(model)}
+                                    className="rounded border-slate-300 text-violet-600 focus:ring-violet-500 h-4 w-4"
+                                  />
+                                  <span className="truncate flex items-center justify-between w-full">
+                                    <span className="font-mono text-[10px] font-bold">{model}</span>
+                                    <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-bold ${
+                                      badge === 'Fast' ? 'bg-blue-100 text-blue-800' :
+                                      badge === 'Best' ? 'bg-emerald-100 text-emerald-800' :
+                                      badge === 'Coding' ? 'bg-purple-100 text-purple-800' :
+                                      badge === 'Reasoning' ? 'bg-indigo-100 text-indigo-800' :
+                                      badge === 'Light' ? 'bg-amber-100 text-amber-800' :
+                                      'bg-slate-100 text-slate-700'
+                                    }`}>
+                                      {badge}
+                                    </span>
+                                  </span>
+                                </div>
+                                <span className="text-[9px] text-slate-400 font-medium ml-6.5 mt-0.5">
+                                  {desc}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+
+                      </div>
+                    )}
+
                     {/* Guide Tab */}
                     {activeAuthProvider === 'helper' && (
                       <div className="p-4 bg-violet-50/50 rounded-2xl border border-violet-100 text-xs space-y-3">
@@ -2577,6 +2791,14 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
                               <li>Kunjungi <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" className="text-violet-600 underline font-bold hover:text-violet-700">Groq Developer Console ↗</a></li>
                               <li>Login akun gratis dan pilih menu <strong>API Keys</strong>.</li>
                               <li>Salin kuncinya yang berawalan <span className="font-mono text-[9px] bg-slate-100 px-1 py-0.5 rounded">gsk_...</span></li>
+                            </ol>
+                          </div>
+                          <div>
+                            <p className="font-bold text-violet-800 border-b border-violet-200/40 pb-0.5">🌟 Mistral AI Key:</p>
+                            <ol className="list-decimal list-inside pl-1 space-y-1">
+                              <li>Kunjungi <a href="https://console.mistral.ai/api-keys/" target="_blank" rel="noreferrer" className="text-violet-600 underline font-bold hover:text-violet-700">Mistral AI Console ↗</a></li>
+                              <li>Login atau buat akun gratis, lalu buka menu <strong>API Keys</strong>.</li>
+                              <li>Klik <strong>"Create API Key"</strong> dan salin kuncinya.</li>
                             </ol>
                           </div>
                         </div>
