@@ -392,6 +392,108 @@ const SPAM_KEYWORDS_BLACKLIST = [
 ];
 
 /**
+ * TASK 1: Normalize keyword phrase - split repeated tokens, remove duplicated words, remove phrase looping
+ */
+export function normalizeKeywordPhrase(phrase: string): string[] {
+  if (!phrase || typeof phrase !== 'string') return [];
+  
+  const normalized = phrase.toLowerCase().trim();
+  
+  // Split into individual words
+  const words = normalized.split(/\s+/).filter(w => w.length > 0);
+  
+  if (words.length === 0) return [];
+  
+  // Detect and remove repeated word patterns (looping)
+  // e.g., "rabbit flat lay rabbit top view flat lay" -> detect repetition
+  const cleanWords: string[] = [];
+  const seenWords = new Set<string>();
+  
+  for (const word of words) {
+    // Skip if word was already seen in this phrase (removes looping)
+    if (seenWords.has(word)) {
+      continue;
+    }
+    seenWords.add(word);
+    cleanWords.push(word);
+  }
+  
+  // Check for repeated phrase patterns (e.g., "flat lay top view flat lay")
+  const phraseStr = cleanWords.join(' ');
+  const repeatedPatternMatch = phraseStr.match(/^(.+?)\s+\1/);
+  if (repeatedPatternMatch) {
+    // Remove the repeated portion
+    const uniquePhrase = phraseStr.replace(repeatedPatternMatch[0], repeatedPatternMatch[1]);
+    return [uniquePhrase.trim()];
+  }
+  
+  // Return as single phrase if multi-word, or individual words
+  if (cleanWords.length > 1) {
+    return [cleanWords.join(' ')];
+  }
+  
+  return cleanWords;
+}
+
+/**
+ * TASK 2: Remove semantic duplicates - detect keywords with too similar meaning
+ * e.g., "rabbit flat lay", "rabbit flat lay top view", "rabbit top view flat lay"
+ */
+export function removeSemanticDuplicates(keywords: string[]): string[] {
+  if (!keywords || keywords.length === 0) return [];
+  
+  const result: string[] = [];
+  const seenNormalized = new Set<string>();
+  
+  // Helper to get normalized semantic signature of a keyword
+  const getSemanticSignature = (kw: string): string => {
+    return kw.toLowerCase()
+      .split(/\s+/)
+      .sort()
+      .join('|');
+  };
+  
+  // Helper to check if two keywords are semantically too similar
+  const areSemanticallySimilar = (kw1: string, kw2: string): boolean => {
+    const words1 = new Set(kw1.toLowerCase().split(/\s+/));
+    const words2 = new Set(kw2.toLowerCase().split(/\s+/));
+    
+    // If one contains all words of the other, they're too similar
+    const intersection = [...words1].filter(w => words2.has(w));
+    const minSize = Math.min(words1.size, words2.size);
+    
+    // If overlap is >80% of the smaller keyword, consider them duplicates
+    if (minSize > 0 && intersection.length / minSize >= 0.8) {
+      return true;
+    }
+    
+    return false;
+  };
+  
+  for (const keyword of keywords) {
+    const normalizedKw = keyword.toLowerCase().trim();
+    const signature = getSemanticSignature(normalizedKw);
+    
+    // Skip if exact semantic signature already exists
+    if (seenNormalized.has(signature)) {
+      continue;
+    }
+    
+    // Check if semantically similar to any existing keyword
+    const isDuplicate = result.some(existing => 
+      areSemanticallySimilar(normalizedKw, existing.toLowerCase())
+    );
+    
+    if (!isDuplicate) {
+      result.push(keyword);
+      seenNormalized.add(signature);
+    }
+  }
+  
+  return result;
+}
+
+/**
  * TASK 1: Calculate keyword priority score based on Adobe Stock SEO rules
  * Higher score = higher priority for first 10 positions
  */
@@ -402,6 +504,7 @@ export function calculateKeywordPriority(keyword: string, visualContext: {
 }): number {
   let score = 0;
   const lowerKeyword = keyword.toLowerCase().trim();
+  const wordCount = lowerKeyword.split(/\s+/).length;
   
   // Priority 1: Exact object match (highest priority)
   if (visualContext.mainObjects?.some(obj => 
@@ -430,11 +533,14 @@ export function calculateKeywordPriority(keyword: string, visualContext: {
     score += 60;
   }
   
-  // Priority 5: Long-tail niche keywords (3+ words)
-  if (lowerKeyword.split(' ').length >= 3) {
+  // Priority 5: Long-tail niche keywords (2-4 words ideal)
+  if (wordCount >= 2 && wordCount <= 4) {
     score += 50;
-  } else if (lowerKeyword.split(' ').length === 2) {
+  } else if (wordCount === 1) {
     score += 30;
+  } else if (wordCount > 4) {
+    // Penalty for too long keywords
+    score -= 20;
   }
   
   // Priority 6: Scene/mood relevance
@@ -649,7 +755,7 @@ export function enforceTop10Keywords(
 
 /**
  * TASK 6: Sanitize keywords for microstock compliance with enhanced SEO optimization
- * Complete pipeline: clean → filter spam → remove duplicates → sort by SEO → enforce top 10
+ * Complete pipeline: clean -> normalize -> filter spam -> remove duplicates -> semantic dedupe -> sort by SEO -> enforce top 10
  */
 export function sanitizeKeywords(
   keywords: string[], 
@@ -672,7 +778,7 @@ export function sanitizeKeywords(
     'file', 'download', 'free', 'sample', 'preview', 'watermark'
   ];
   
-  // Step 1: Clean and normalize each keyword
+  // Step 1: Clean and normalize each keyword - TASK 1 & 5
   let cleaned = keywords
     .map(kw => String(kw))
     .map(kw => kw.trim())
@@ -691,12 +797,18 @@ export function sanitizeKeywords(
   // Step 3: Filter spam keywords using expanded blacklist
   cleaned = filterSpamKeywords(cleaned);
   
-  // Step 4: Remove duplicates (case-insensitive)
+  // Step 4: Normalize keyword phrases - remove looping and repeated words (TASK 1)
+  cleaned = cleaned.flatMap(kw => normalizeKeywordPhrase(kw));
+  
+  // Step 5: Remove exact duplicates (case-insensitive)
   cleaned = Array.from(
     new Map(cleaned.map(kw => [kw.toLowerCase(), kw])).values()
   );
   
-  // Step 5: Generate long-tail variations and add them
+  // Step 6: Remove semantic duplicates (TASK 2)
+  cleaned = removeSemanticDuplicates(cleaned);
+  
+  // Step 7: Generate long-tail variations and add them
   const longTail = generateLongTailKeywords(cleaned, visualContext ? {
     mainObject: visualContext.mainObjects?.[0],
     commercialUse: ['copy space', 'background', 'template'],
@@ -705,18 +817,21 @@ export function sanitizeKeywords(
   
   cleaned = [...cleaned, ...longTail];
   
-  // Step 6: Remove duplicates again after long-tail generation
+  // Step 8: Remove duplicates again after long-tail generation
   cleaned = Array.from(
     new Map(cleaned.map(kw => [kw.toLowerCase(), kw])).values()
   );
   
-  // Step 7: Sort by SEO value with visual context
+  // Step 9: Remove semantic duplicates again after long-tail generation
+  cleaned = removeSemanticDuplicates(cleaned);
+  
+  // Step 10: Sort by SEO value with visual context
   cleaned = sortKeywordsBySEO(cleaned, visualContext);
   
-  // Step 8: Enforce top 10 keywords for highest search intent
+  // Step 11: Enforce top 10 keywords for highest search intent
   cleaned = enforceTop10Keywords(cleaned, visualContext, maxCount);
   
-  // Step 9: Limit to max count
+  // Step 12: Limit to max count
   return cleaned.slice(0, maxCount);
 }
 
@@ -728,14 +843,14 @@ export function sanitizeKeywords(
  * - Prioritizes key concepts if provided
  */
 export function applyUserPreferences(
-  metadata: { title: string; description: string; keywords: string[] },
+  metadata: { title: string; description: string; keywords: string[]; categories?: Record<string, string> },
   settings: {
     titleLength?: number;
     descLength?: number;
     keywordsCount?: number;
     keyConcepts?: string;
   }
-): { title: string; description: string; keywords: string[] } {
+): { title: string; description: string; keywords: string[]; categories?: Record<string, string> } {
   const titleLimit = settings.titleLength || 70;
   const descLimit = settings.descLength || 160;
   const keywordCount = settings.keywordsCount || 35;
@@ -781,7 +896,8 @@ export function applyUserPreferences(
   return {
     title,
     description,
-    keywords
+    keywords,
+    categories: metadata.categories
   };
 }
 
@@ -840,7 +956,7 @@ export function optimizeMicrostockKeywords(keywords: string[], maxKeywords: numb
   cleaned = filterSpamKeywords(cleaned);
 
   // Step 4: Generate long-tail variations
-  const longTail = generateLongTailKeywords(cleaned, 10);
+  const longTail = generateLongTailKeywords(cleaned, undefined, 10);
   cleaned = [...cleaned, ...longTail];
 
   // Step 5: Remove duplicates again after long-tail generation
