@@ -977,13 +977,32 @@ TARGET AGENSI: ${platformsStr || 'Shutterstock, Adobe Stock, Freepik, Canva'}
 MISI:
 Buatlah judul komersial yang komprehensif, deskripsi kreatif yang memikat, klasifikasi kategori per platform, serta tag kata kunci ramah mesin pencari yang sepenuhnya "GROUNDED" (berpijak nyata) pada aset ini.
 ${dynamicRules}
+
+IMPORTANT METADATA RULES (WAJIB DIPATUHI):
+- Generate only visually relevant keywords that actually appear in the asset.
+- Prioritize main objects first (first 10 keywords = highest search intent).
+- Use single keyword SEO structure (1-2 words max, long-tail max 3 words).
+- Avoid generic adjectives (beautiful, adorable, amazing, nice, bright, colorful).
+- Avoid filler keywords (concept, holiday mood, country, aesthetic, yummy, tasty, delicious).
+- First 10 keywords must be highest search intent and most visually relevant.
+- Understand 3 layers:
+  1. Objects in asset (what is physically visible)
+  2. Scene flow (scenario, context, situation)
+  3. Commercial concept (buyer intent, usage purpose)
+- Generate commercial-use metadata with strong buyer intent.
+- Use Adobe Stock SEO structure.
+- Avoid keyword spam, phrase looping, or semantic duplicates.
+- Keywords must be SINGLE keyword mode: no phrases longer than 3 words.
+- Remove weak adjectives as standalone keywords.
+- Each keyword must be unique and semantically distinct.
+
 ATURAN METADATA 100% SUKSES:
 1. JUDUL SEO: Wajib mengandung formula 3-Layer: [Elemen fisik nyata] + [Aksi / Alur cerita] + [Makna komersial / Niche]. Panjang HARUS ${minT}-${maxT} karakter (STRICT).
 2. DESKRIPSI: Ceritakan alur visual gambar secara natural dan menarik bagi pembeli antara ${minD}-${maxD} karakter (STRICT).
 3. KATA KUNCI (KEYWORDS): Hasilkan TEPAT ${kwTarget} kata kunci unik. No spasi (single keywords).
-   - Urutan 1-10: Subjek & visual dominan nyata yang terlihat di frame.
-   - Urutan 11-25: Aksi, gerak tubuh, emosi, warna, pencahayaan.
-   - Urutan 26-${kwTarget}: Hubungan konsep bisnis, kegunaan komersial, trend microstock.
+   - Urutan 1-10: Subjek & visual dominan nyata yang terlihat di frame (OBJECT PRIORITY).
+   - Urutan 11-25: Aksi, gerak tubuh, emosi, warna, pencahayaan, scene flow.
+   - Urutan 26-${kwTarget}: Hubungan konsep bisnis, kegunaan komersial, commercial intent.
    ${item.settings.keyConcepts ? `- ⭐ PRIORITAS UTAMA: Kata kunci "${item.settings.keyConcepts}" wajib ditempatkan di posisi 1-5!` : ''}
 4. LEGAL & TRADEMARK SAFETY: Hindari nama brand terlarang (Nike, Apple, iPhone, BMW, Sony, dsb). Ganti dengan nama generik (modern smartphone, athletic shoes, luxury car, dsb). Dilarang keras menulis brand kamera!
 5. KATEGORI PLATFORM RESMI (WAJIB PILIH DARI DAFTAR DI BAWAH): 
@@ -999,7 +1018,7 @@ OUTPUT WAJIB: KELUARKAN HANYA FORMAT JSON BERIKUT (TANPA RAW TEXT / BACKTICKS):
 {
   "title": "Judul 3-Layer Bahasa Inggris padat SEO, panjang SEKITAR ${item.settings.titleLength} karakter (MAX ${maxT})",
   "description": "Deskripsi kreatif Bahasa Inggris berbobot komersial, panjang SEKITAR ${item.settings.descLength} karakter (MAX ${maxD})",
-  "keywords": [TEPAT ${kwTarget} kata kunci unik, dipisah koma, NO SPAM],
+  "keywords": [TEPAT ${kwTarget} kata kunci unik, dipisah koma, NO SPAM, SINGLE KEYWORD MODE],
   "categories": {
     "shutterstock1": "Kategori ke-1",
     "shutterstock2": "Kategori ke-2 berbeda",
