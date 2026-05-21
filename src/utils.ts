@@ -1,5 +1,350 @@
 import { BANNED_TRADEMARKS } from './constants';
-import { QueueItem } from './types';
+import { QueueItem, ComplianceResult, ComplianceViolation } from './types';
+import {
+  BANNED_STYLE_PHRASES,
+  BANNED_FICTIONAL_NAMES,
+  BANNED_CELEBRITIES,
+  BANNED_ARTISTS,
+  BANNED_MOVIE_FRANCHISES,
+  BANNED_ANIME_SERIES,
+  BANNED_GAME_FRANCHISES,
+  BANNED_BRANDS,
+  BANNED_NEWS_EVENTS,
+  ALL_BANNED_TERMS,
+  COMPLIANCE_REGEX_PATTERNS
+} from './constants/compliance';
+
+// =========================================
+// MICROSTOCK COMPLIANCE FILTER SYSTEM
+// For Adobe Stock, Shutterstock, Freepik, iStock, Vecteezy, Canva, Dreamstime
+// =========================================
+
+/**
+ * Scan text for compliance violations across all banned categories
+ */
+export function scanComplianceViolations(
+  text: string,
+  field: 'title' | 'description' | 'keywords' | 'prompt' = 'title'
+): ComplianceViolation[] {
+  if (!text) return [];
+
+  const violations: ComplianceViolation[] = [];
+  const lowerText = text.toLowerCase();
+
+  // Check style reference phrases
+  BANNED_STYLE_PHRASES.forEach(phrase => {
+    if (lowerText.includes(phrase)) {
+      violations.push({
+        type: 'style',
+        term: phrase,
+        field,
+        severity: 'high'
+      });
+    }
+  });
+
+  // Check regex patterns for variations
+  Object.entries(COMPLIANCE_REGEX_PATTERNS).forEach(([patternName, regex]) => {
+    const matches = lowerText.match(regex);
+    if (matches) {
+      matches.forEach(match => {
+        const trimmedMatch = match.trim();
+        // Avoid duplicate violations
+        if (!violations.some(v => v.term === trimmedMatch)) {
+          let violationType: ComplianceViolation['type'] = 'brand';
+          let severity: ComplianceViolation['severity'] = 'medium';
+
+          if (patternName.includes('style')) {
+            violationType = 'style';
+            severity = 'high';
+          } else if (patternName.includes('fictional')) {
+            violationType = 'fictional';
+            severity = 'high';
+          } else if (patternName.includes('celebrity')) {
+            violationType = 'celebrity';
+            severity = 'high';
+          } else if (patternName.includes('media')) {
+            violationType = 'media';
+            severity = 'high';
+          } else if (patternName.includes('news')) {
+            violationType = 'news';
+            severity = 'medium';
+          }
+
+          violations.push({
+            type: violationType,
+            term: trimmedMatch,
+            field,
+            severity
+          });
+        }
+      });
+    }
+  });
+
+  // Check banned arrays with fuzzy lowercase comparison
+  const checkBannedList = (
+    list: string[],
+    type: ComplianceViolation['type'],
+    severity: ComplianceViolation['severity']
+  ) => {
+    list.forEach(term => {
+      const termLower = term.toLowerCase();
+      // Check for exact word boundary match or inclusion
+      const wordBoundaryRegex = new RegExp(`\\b${termLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+      if (wordBoundaryRegex.test(lowerText) || lowerText.includes(termLower)) {
+        if (!violations.some(v => v.term.toLowerCase() === termLower)) {
+          violations.push({
+            type,
+            term,
+            field,
+            severity
+          });
+        }
+      }
+    });
+  };
+
+  checkBannedList(BANNED_FICTIONAL_NAMES, 'fictional', 'high');
+  checkBannedList(BANNED_CELEBRITIES, 'celebrity', 'high');
+  checkBannedList(BANNED_ARTISTS, 'artist', 'high');
+  checkBannedList(BANNED_MOVIE_FRANCHISES, 'media', 'high');
+  checkBannedList(BANNED_ANIME_SERIES, 'media', 'high');
+  checkBannedList(BANNED_GAME_FRANCHISES, 'media', 'high');
+  checkBannedList(BANNED_BRANDS, 'brand', 'high');
+  checkBannedList(BANNED_NEWS_EVENTS, 'news', 'medium');
+
+  return violations;
+}
+
+/**
+ * Calculate compliance score based on violations found
+ */
+export function calculateComplianceScore(violations: ComplianceViolation[]): number {
+  if (violations.length === 0) return 100;
+
+  let score = 100;
+  violations.forEach(violation => {
+    switch (violation.severity) {
+      case 'high':
+        score -= 15;
+        break;
+      case 'medium':
+        score -= 8;
+        break;
+      case 'low':
+        score -= 3;
+        break;
+    }
+  });
+
+  return Math.max(0, score);
+}
+
+/**
+ * Sanitize metadata by removing banned terms and phrases
+ */
+export function sanitizeComplianceMetadata(metadata: {
+  title: string;
+  description: string;
+  keywords: string[];
+}): {
+  title: string;
+  description: string;
+  keywords: string[];
+  warnings: string[];
+} {
+  const warnings: string[] = [];
+
+  // Helper function to remove banned terms from text
+  const cleanText = (text: string, fieldName: string): string => {
+    let cleaned = text;
+    const lowerCleaned = cleaned.toLowerCase();
+
+    // Remove style phrases
+    BANNED_STYLE_PHRASES.forEach(phrase => {
+      const regex = new RegExp(`\\b${phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+      if (regex.test(cleaned)) {
+        cleaned = cleaned.replace(regex, '');
+        warnings.push(`Removed style phrase "${phrase}" from ${fieldName}`);
+      }
+    });
+
+    // Apply regex pattern cleaning
+    Object.entries(COMPLIANCE_REGEX_PATTERNS).forEach(([, regex]) => {
+      const matches = cleaned.match(regex);
+      if (matches) {
+        matches.forEach(match => {
+          const escapedMatch = match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const removeRegex = new RegExp(escapedMatch, 'gi');
+          cleaned = cleaned.replace(removeRegex, '');
+        });
+        if (matches.length > 0) {
+          warnings.push(`Removed ${matches.length} banned pattern match(es) from ${fieldName}`);
+        }
+      }
+    });
+
+    // Remove banned terms from lists
+    const allBannedTerms = [
+      ...BANNED_FICTIONAL_NAMES,
+      ...BANNED_CELEBRITIES,
+      ...BANNED_ARTISTS,
+      ...BANNED_MOVIE_FRANCHISES,
+      ...BANNED_ANIME_SERIES,
+      ...BANNED_GAME_FRANCHISES,
+      ...BANNED_BRANDS
+    ];
+
+    allBannedTerms.forEach(term => {
+      const termLower = term.toLowerCase();
+      const wordBoundaryRegex = new RegExp(`\\b${termLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+      if (wordBoundaryRegex.test(cleaned)) {
+        cleaned = cleaned.replace(wordBoundaryRegex, '');
+        warnings.push(`Removed banned term "${term}" from ${fieldName}`);
+      }
+    });
+
+    // Clean up extra spaces and punctuation issues
+    cleaned = cleaned.replace(/\s+/g, ' ').trim();
+    cleaned = cleaned.replace(/\s+[,.;:!?]/g, ',');
+    cleaned = cleaned.replace(/^[,.;:!?]+|[,.;:!?]+$/g, '');
+
+    return cleaned;
+  };
+
+  // Clean title
+  let sanitizedTitle = cleanText(metadata.title || '', 'title');
+  if (!sanitizedTitle) {
+    sanitizedTitle = 'Commercial lifestyle image';
+    warnings.push('Title was empty after sanitization, using generic fallback');
+  }
+
+  // Clean description
+  let sanitizedDescription = cleanText(metadata.description || '', 'description');
+  if (!sanitizedDescription) {
+    sanitizedDescription = 'Professional commercial asset suitable for various design projects.';
+    warnings.push('Description was empty after sanitization, using generic fallback');
+  }
+
+  // Clean keywords
+  const sanitizedKeywords = metadata.keywords
+    .map(kw => {
+      let cleanedKw = kw;
+      const lowerKw = cleanedKw.toLowerCase();
+
+      // Check against all banned lists
+      const allBannedTerms = [
+        ...BANNED_FICTIONAL_NAMES,
+        ...BANNED_CELEBRITIES,
+        ...BANNED_ARTISTS,
+        ...BANNED_MOVIE_FRANCHISES,
+        ...BANNED_ANIME_SERIES,
+        ...BANNED_GAME_FRANCHISES,
+        ...BANNED_BRANDS,
+        ...BANNED_STYLE_PHRASES
+      ];
+
+      allBannedTerms.forEach(term => {
+        const termLower = term.toLowerCase();
+        if (lowerKw === termLower || lowerKw.includes(termLower)) {
+          cleanedKw = '';
+          warnings.push(`Removed banned keyword "${term}"`);
+        }
+      });
+
+      // Apply regex patterns
+      Object.values(COMPLIANCE_REGEX_PATTERNS).forEach(regex => {
+        if (regex.test(lowerKw)) {
+          cleanedKw = '';
+          warnings.push(`Removed keyword matching banned pattern: "${kw}"`);
+        }
+      });
+
+      return cleanedKw.trim();
+    })
+    .filter(kw => kw.length > 0 && kw.length <= 50);
+
+  // Remove duplicate keywords after sanitization
+  const uniqueKeywords = Array.from(new Set(sanitizedKeywords.map(k => k.toLowerCase())))
+    .map(lower => sanitizedKeywords.find(k => k.toLowerCase() === lower) || '')
+    .filter(Boolean);
+
+  return {
+    title: sanitizedTitle,
+    description: sanitizedDescription,
+    keywords: uniqueKeywords,
+    warnings
+  };
+}
+
+/**
+ * Full compliance check and sanitization pipeline
+ */
+export function enforceCompliance(metadata: {
+  title: string;
+  description: string;
+  keywords: string[];
+}, prompt?: string): {
+  metadata: {
+    title: string;
+    description: string;
+    keywords: string[];
+  };
+  complianceResult: ComplianceResult;
+} {
+  // Scan for violations
+  const titleViolations = scanComplianceViolations(metadata.title, 'title');
+  const descViolations = scanComplianceViolations(metadata.description, 'description');
+  const keywordViolations = metadata.keywords.flatMap(kw =>
+    scanComplianceViolations(kw, 'keywords')
+  );
+  const promptViolations = prompt ? scanComplianceViolations(prompt, 'prompt') : [];
+
+  const allViolations = [...titleViolations, ...descViolations, ...keywordViolations, ...promptViolations];
+
+  // Calculate compliance score
+  const complianceScore = calculateComplianceScore(allViolations);
+
+  // Generate warnings
+  const warnings = allViolations.map(v =>
+    `Detected ${v.type} reference: "${v.term}" in ${v.field}`
+  );
+
+  // Sanitize metadata
+  const sanitized = sanitizeComplianceMetadata(metadata);
+
+  // Add sanitization warnings
+  warnings.push(...sanitized.warnings);
+
+  return {
+    metadata: {
+      title: sanitized.title,
+      description: sanitized.description,
+      keywords: sanitized.keywords
+    },
+    complianceResult: {
+      complianceScore,
+      warnings,
+      violationsFound: allViolations
+    }
+  };
+}
+
+/**
+ * Generate compliance-safe AI prompt instructions
+ */
+export const COMPLIANCE_PROMPT_INSTRUCTIONS = `COMPLIANCE RULES - MANDATORY FOR MICROSTOCK ACCEPTANCE:
+- Do not mention any brand names (Apple, Nike, BMW, Sony, etc.)
+- Do not mention copyrighted artists or art styles (Van Gogh, Picasso, Disney, etc.)
+- Do not mention fictional characters (Mickey Mouse, Batman, Naruto, Mario, etc.)
+- Do not mention celebrities or public figures (Taylor Swift, Elon Musk, etc.)
+- Do not generate style references ("in the style of", "inspired by", etc.)
+- Do not imply real news events, elections, protests, or political content
+- Generate fully generic commercial metadata that is safe for all microstock platforms
+- Use descriptive, generic terms only (e.g., "athletic shoes" not "Nike")
+- Focus on visual elements, colors, composition, and commercial concepts
+- All output must pass Adobe Stock, Shutterstock, and Freepik compliance checks`;
 
 // =========================================
 // MICROSTOCK SEO UTILITIES

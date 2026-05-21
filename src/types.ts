@@ -15,6 +15,19 @@ export interface Metadata {
   };
 }
 
+export interface ComplianceResult {
+  complianceScore: number;
+  warnings: string[];
+  violationsFound: ComplianceViolation[];
+}
+
+export interface ComplianceViolation {
+  type: 'brand' | 'celebrity' | 'fictional' | 'artist' | 'style' | 'media' | 'news';
+  term: string;
+  field: 'title' | 'description' | 'keywords' | 'prompt';
+  severity: 'high' | 'medium' | 'low';
+}
+
 export interface ItemSettings {
   titleLength: number;
   descLength: number;
