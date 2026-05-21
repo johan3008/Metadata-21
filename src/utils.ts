@@ -347,7 +347,8 @@ export const COMPLIANCE_PROMPT_INSTRUCTIONS = `COMPLIANCE RULES - MANDATORY FOR 
 - All output must pass Adobe Stock, Shutterstock, and Freepik compliance checks`;
 
 // =========================================
-// MICROSTOCK SEO UTILITIES
+// =========================================
+// MICROSTOCK SEO UTILITIES - ENHANCED
 // =========================================
 
 // Commercial keywords with high buyer intent (priority order)
@@ -363,117 +364,304 @@ const COMMERCIAL_KEYWORDS = [
   'mockup'
 ];
 
-// Spam/low-value keywords blacklist for microstock 2026
+// Spam/low-value keywords blacklist for microstock 2026 - EXPANDED
 const SPAM_KEYWORDS_BLACKLIST = [
-  'beautiful',
-  'awesome',
-  'cool',
-  'nice',
-  'amazing',
-  'best quality',
-  'ultra hd',
-  'masterpiece'
+  'food', 'delicious', 'aesthetic', 'tasty', 'yummy',
+  'beautiful', 'awesome', 'cool', 'nice', 'amazing',
+  'best quality', 'masterpiece', 'ultra hd',
+  'tasteful', 'scrumptious', 'flavorful', 'savory',
+  'delectable', 'appetizing', 'mouthwatering', 'delightful',
+  'wonderful', 'gorgeous', 'stunning', 'breathtaking',
+  'spectacular', 'incredible', 'fantastic', 'marvelous',
+  'fabulous', 'terrific', 'excellent', 'superb',
+  'outstanding', 'exceptional', 'remarkable', 'impressive',
+  'magnificent', 'splendid', 'glorious', 'radiant',
+  'dazzling', 'vibrant', 'lively', 'charming',
+  'elegant', 'sophisticated', 'classy', 'stylish',
+  'trendy', 'fashionable', 'chic',
+  'perfect', 'flawless', 'impeccable', 'pristine',
+  'high quality', 'premium', 'luxury', 'exclusive',
+  'unique', 'special', 'rare', 'precious',
+  'valuable', 'priceless', 'irreplaceable',
+  'innovative', 'revolutionary', 'groundbreaking',
+  'cutting-edge', 'state-of-the-art', 'advanced',
+  'professional', 'creative', 'modern', 'contemporary',
+  'minimal', 'clean', 'simple', 'basic',
+  'generic', 'standard', 'common', 'ordinary',
+  'typical', 'regular', 'normal', 'average'
 ];
 
 /**
- * Sort keywords by SEO value and buyer intent
- * Prioritizes commercial keywords first, then alphabetical
+ * TASK 1: Calculate keyword priority score based on Adobe Stock SEO rules
+ * Higher score = higher priority for first 10 positions
  */
-export function sortKeywordsBySEO(keywords: string[]): string[] {
-  if (!keywords || keywords.length === 0) return [];
-
-  const lowerKeywords = keywords.map(kw => kw.toLowerCase().trim());
+export function calculateKeywordPriority(keyword: string, visualContext: {
+  mainObjects?: string[];
+  composition?: string[];
+  scene?: string;
+}): number {
+  let score = 0;
+  const lowerKeyword = keyword.toLowerCase().trim();
   
-  // Separate commercial priority keywords from regular keywords
-  const commercialKeywords: string[] = [];
-  const regularKeywords: string[] = [];
-
-  lowerKeywords.forEach(kw => {
-    if (COMMERCIAL_KEYWORDS.some(commercial => kw.includes(commercial) || commercial.includes(kw))) {
-      if (!commercialKeywords.includes(kw)) {
-        commercialKeywords.push(kw);
-      }
-    } else {
-      if (!regularKeywords.includes(kw)) {
-        regularKeywords.push(kw);
-      }
-    }
-  });
-
-  // Sort commercial keywords by priority order
-  commercialKeywords.sort((a, b) => {
-    const aIndex = COMMERCIAL_KEYWORDS.findIndex(ck => a.includes(ck) || ck.includes(a));
-    const bIndex = COMMERCIAL_KEYWORDS.findIndex(ck => b.includes(ck) || ck.includes(b));
-    return aIndex - bIndex;
-  });
-
-  // Sort regular keywords alphabetically
-  regularKeywords.sort();
-
-  return [...commercialKeywords, ...regularKeywords];
+  // Priority 1: Exact object match (highest priority)
+  if (visualContext.mainObjects?.some(obj => 
+    lowerKeyword.includes(obj.toLowerCase()) || obj.toLowerCase().includes(lowerKeyword)
+  )) {
+    score += 100;
+  }
+  
+  // Priority 2: Main subject relevance
+  if (visualContext.mainObjects?.some(obj => 
+    lowerKeyword.includes(obj.toLowerCase())
+  )) {
+    score += 80;
+  }
+  
+  // Priority 3: Commercial usage intent
+  const commercialTerms = ['copy space', 'background', 'banner', 'template', 'flat lay', 'top view', 'mockup', 'advertising'];
+  if (commercialTerms.some(term => lowerKeyword.includes(term))) {
+    score += 70;
+  }
+  
+  // Priority 4: Composition keywords
+  if (visualContext.composition?.some(comp => 
+    lowerKeyword.includes(comp.toLowerCase())
+  )) {
+    score += 60;
+  }
+  
+  // Priority 5: Long-tail niche keywords (3+ words)
+  if (lowerKeyword.split(' ').length >= 3) {
+    score += 50;
+  } else if (lowerKeyword.split(' ').length === 2) {
+    score += 30;
+  }
+  
+  // Priority 6: Scene/mood relevance
+  if (visualContext.scene && lowerKeyword.includes(visualContext.scene.toLowerCase())) {
+    score += 40;
+  }
+  
+  // Penalty: Generic/spam keywords
+  if (SPAM_KEYWORDS_BLACKLIST.some(spam => lowerKeyword === spam || lowerKeyword.includes(spam))) {
+    score -= 100;
+  }
+  
+  // Penalty: Too short or single generic word
+  if (lowerKeyword.length <= 3 && !['3d', '4k', 'hd'].includes(lowerKeyword)) {
+    score -= 20;
+  }
+  
+  return score;
 }
 
 /**
- * Generate long-tail keyword variations from base keywords
- * Creates more specific, searchable combinations for modern microstock platforms
+ * TASK 2 & 5: Generate long-tail keyword variations with commercial intent
+ * Creates searchable phrases buyers actually use
  */
-export function generateLongTailKeywords(keywords: string[], maxVariations: number = 10): string[] {
+export function generateLongTailKeywords(
+  keywords: string[], 
+  visualContext?: {
+    mainObject?: string;
+    commercialUse?: string[];
+    composition?: string[];
+  },
+  maxVariations: number = 15
+): string[] {
   if (!keywords || keywords.length < 2) return [];
-
-  const longTailKeywords: string[] = [];
-  const commonModifiers = ['modern', 'professional', 'creative', 'minimal', 'vintage', '3d render', 'isolated', 'transparent background'];
   
-  // Generate combination keywords
-  for (let i = 0; i < keywords.length && longTailKeywords.length < maxVariations; i++) {
-    for (let j = i + 1; j < keywords.length && longTailKeywords.length < maxVariations; j++) {
-      const combined = `${keywords[i]} ${keywords[j]}`;
-      if (combined.length <= 50 && !keywords.includes(combined)) {
+  const longTailKeywords: string[] = [];
+  const seen = new Set<string>();
+  
+  // Commercial modifiers for long-tail generation
+  const commercialModifiers = [
+    'modern', 'professional', 'creative', 'minimal', 'vintage',
+    'cozy', 'elegant', 'business', 'lifestyle', 'commercial'
+  ];
+  
+  // Composition modifiers
+  const compositionModifiers = [
+    'flat lay', 'top view', 'overhead', 'close-up', 'macro',
+    'copy space', 'background', 'isolated'
+  ];
+  
+  // Get main objects (first 5 keywords are typically main subjects)
+  const mainObjects = keywords.slice(0, 5);
+  
+  // Generate combination keywords from main objects
+  for (let i = 0; i < Math.min(mainObjects.length, 4); i++) {
+    for (let j = i + 1; j < Math.min(mainObjects.length, 5); j++) {
+      const combined = `${mainObjects[i]} ${mainObjects[j]}`;
+      const reverseCombined = `${mainObjects[j]} ${mainObjects[i]}`;
+      
+      if (combined.length <= 50 && !seen.has(combined.toLowerCase())) {
         longTailKeywords.push(combined);
+        seen.add(combined.toLowerCase());
+      }
+      
+      if (reverseCombined.length <= 50 && !seen.has(reverseCombined.toLowerCase())) {
+        longTailKeywords.push(reverseCombined);
+        seen.add(reverseCombined.toLowerCase());
       }
     }
     
-    // Add modifier combinations for main keywords
-    if (i < 5) {
-      commonModifiers.slice(0, 3).forEach(modifier => {
-        if (longTailKeywords.length < maxVariations) {
-          const modified = `${modifier} ${keywords[i]}`;
-          if (!keywords.includes(modified) && !longTailKeywords.includes(modified)) {
-            longTailKeywords.push(modified);
-          }
+    // Add commercial modifier combinations for main keywords
+    if (i < 3) {
+      commercialModifiers.slice(0, 5).forEach(modifier => {
+        const modified = `${modifier} ${mainObjects[i]}`;
+        if (!seen.has(modified.toLowerCase()) && modified.length <= 50) {
+          longTailKeywords.push(modified);
+          seen.add(modified.toLowerCase());
+        }
+      });
+      
+      // Add composition combinations
+      compositionModifiers.slice(0, 4).forEach(comp => {
+        const compModified = `${mainObjects[i]} ${comp}`;
+        if (!seen.has(compModified.toLowerCase()) && compModified.length <= 50) {
+          longTailKeywords.push(compModified);
+          seen.add(compModified.toLowerCase());
         }
       });
     }
   }
-
-  return longTailKeywords;
+  
+  // Add niche intent phrases based on visual context
+  if (visualContext?.mainObject) {
+    const nichePhrases = [
+      `${visualContext.mainObject} for commercial use`,
+      `${visualContext.mainObject} background`,
+      `${visualContext.mainObject} with copy space`,
+      `professional ${visualContext.mainObject}`,
+      `${visualContext.mainObject} flat lay`
+    ];
+    
+    nichePhrases.forEach(phrase => {
+      if (!seen.has(phrase.toLowerCase()) && phrase.length <= 50) {
+        longTailKeywords.push(phrase);
+        seen.add(phrase.toLowerCase());
+      }
+    });
+  }
+  
+  return longTailKeywords.slice(0, maxVariations);
 }
 
 /**
- * Filter out spam and low-value keywords
- * Removes subjective adjectives and technical specs that don't improve searchability
+ * TASK 3: Filter out spam and low-value keywords
+ * Removes subjective adjectives, generic terms, and non-buyer-intent keywords
  */
 export function filterSpamKeywords(keywords: string[]): string[] {
   if (!keywords || keywords.length === 0) return [];
-
+  
   return keywords.filter(kw => {
     const lowerKw = kw.toLowerCase().trim();
-    return !SPAM_KEYWORDS_BLACKLIST.some(spam => 
+    
+    // Check against expanded spam blacklist
+    if (SPAM_KEYWORDS_BLACKLIST.some(spam => 
       lowerKw === spam || lowerKw.includes(spam)
-    );
+    )) {
+      return false;
+    }
+    
+    // Filter out overly generic single words (unless they're specific objects)
+    if (lowerKw.length <= 4 && lowerKw.split(' ').length === 1) {
+      // Allow specific short words that could be objects
+      const allowedShortWords = ['3d', '4k', 'hd', 'ui', 'ux', 'app', 'web', 'seo', 'pdf'];
+      if (!allowedShortWords.includes(lowerKw)) {
+        return false;
+      }
+    }
+    
+    return true;
   });
 }
 
 /**
- * Sanitize keywords for microstock compliance
- * - Remove special characters except alphanumeric and hyphens
- * - Normalize to lowercase
- * - Remove duplicates
- * - Filter out forbidden technical terms
- * - Ensure keyword length between 2-50 characters
+ * TASK 4 & 7: Sort keywords by SEO value and buyer intent
+ * Prioritizes exact object matches, commercial intent, and long-tail keywords first
  */
-export function sanitizeKeywords(keywords: string[], maxCount: number = 35): string[] {
+export function sortKeywordsBySEO(keywords: string[], visualContext?: {
+  mainObjects?: string[];
+  composition?: string[];
+  scene?: string;
+}): string[] {
   if (!keywords || keywords.length === 0) return [];
+  
+  // Remove duplicates first (case-insensitive)
+  const uniqueKeywords = Array.from(
+    new Map(keywords.map(kw => [kw.toLowerCase().trim(), kw])).values()
+  );
+  
+  // Score each keyword
+  const scoredKeywords = uniqueKeywords.map(kw => ({
+    keyword: kw,
+    score: calculateKeywordPriority(kw, visualContext || {})
+  }));
+  
+  // Sort by score (descending), then by length (longer first for tie-breaker)
+  scoredKeywords.sort((a, b) => {
+    if (b.score !== a.score) {
+      return b.score - a.score;
+    }
+    // Tie-breaker: prefer longer, more specific keywords
+    const aWords = a.keyword.split(' ').length;
+    const bWords = b.keyword.split(' ').length;
+    if (bWords !== aWords) {
+      return bWords - aWords;
+    }
+    // Final tie-breaker: alphabetical
+    return a.keyword.localeCompare(b.keyword);
+  });
+  
+  return scoredKeywords.map(item => item.keyword);
+}
 
+/**
+ * TASK 7: Enforce top 10 keywords with strongest relevance and commercial intent
+ * Ensures first 10 positions are reserved for highest-value keywords
+ */
+export function enforceTop10Keywords(
+  keywords: string[], 
+  visualContext?: {
+    mainObjects?: string[];
+    composition?: string[];
+    scene?: string;
+  },
+  totalCount: number = 35
+): string[] {
+  if (!keywords || keywords.length === 0) return [];
+  
+  // Score and sort all keywords
+  const sortedKeywords = sortKeywordsBySEO(keywords, visualContext);
+  
+  // Take top 10 for highest priority positions
+  const top10 = sortedKeywords.slice(0, 10);
+  
+  // Remaining keywords fill the rest
+  const remaining = sortedKeywords.slice(10);
+  
+  // Combine and limit to total count
+  const result = [...top10, ...remaining].slice(0, totalCount);
+  
+  return result;
+}
+
+/**
+ * TASK 6: Sanitize keywords for microstock compliance with enhanced SEO optimization
+ * Complete pipeline: clean → filter spam → remove duplicates → sort by SEO → enforce top 10
+ */
+export function sanitizeKeywords(
+  keywords: string[], 
+  maxCount: number = 35,
+  visualContext?: {
+    mainObjects?: string[];
+    composition?: string[];
+    scene?: string;
+  }
+): string[] {
+  if (!keywords || keywords.length === 0) return [];
+  
   // Forbidden technical/medium indicators for microstock 2026
   const FORBIDDEN_TERMS = [
     '4k', '8k', 'hd', 'uhd', 'hdr', 'resolution', 'megapixel', 'mp',
@@ -483,28 +671,53 @@ export function sanitizeKeywords(keywords: string[], maxCount: number = 35): str
     'ultra', 'high quality', 'best quality', 'masterpiece', 'render', '3d render',
     'file', 'download', 'free', 'sample', 'preview', 'watermark'
   ];
-
+  
   // Step 1: Clean and normalize each keyword
-  const cleaned = keywords
+  let cleaned = keywords
     .map(kw => String(kw))
     .map(kw => kw.trim())
-    .map(kw => kw.replace(/[^a-z0-9\s-]/gi, '')) // Remove special chars except alphanumeric and hyphen
+    .map(kw => kw.replace(/[^a-z0-9\s-]/gi, ''))
     .map(kw => kw.toLowerCase())
-    .map(kw => kw.replace(/\s+/g, ' ')) // Normalize multiple spaces to single space
-    .filter(kw => kw.length >= 2 && kw.length <= 50); // Enforce length limits
-
+    .map(kw => kw.replace(/\s+/g, ' '))
+    .filter(kw => kw.length >= 2 && kw.length <= 50);
+  
   // Step 2: Remove forbidden terms
-  const filtered = cleaned.filter(kw => {
-    return !FORBIDDEN_TERMS.some(term => 
+  cleaned = cleaned.filter(kw => {
+    return !FORBIDDEN_TERMS.some(term =>
       kw === term || kw.includes(term)
     );
   });
-
-  // Step 3: Remove duplicates (case-insensitive)
-  const unique = Array.from(new Set(filtered));
-
-  // Step 4: Limit to max count
-  return unique.slice(0, maxCount);
+  
+  // Step 3: Filter spam keywords using expanded blacklist
+  cleaned = filterSpamKeywords(cleaned);
+  
+  // Step 4: Remove duplicates (case-insensitive)
+  cleaned = Array.from(
+    new Map(cleaned.map(kw => [kw.toLowerCase(), kw])).values()
+  );
+  
+  // Step 5: Generate long-tail variations and add them
+  const longTail = generateLongTailKeywords(cleaned, visualContext ? {
+    mainObject: visualContext.mainObjects?.[0],
+    commercialUse: ['copy space', 'background', 'template'],
+    composition: visualContext.composition
+  } : undefined, 10);
+  
+  cleaned = [...cleaned, ...longTail];
+  
+  // Step 6: Remove duplicates again after long-tail generation
+  cleaned = Array.from(
+    new Map(cleaned.map(kw => [kw.toLowerCase(), kw])).values()
+  );
+  
+  // Step 7: Sort by SEO value with visual context
+  cleaned = sortKeywordsBySEO(cleaned, visualContext);
+  
+  // Step 8: Enforce top 10 keywords for highest search intent
+  cleaned = enforceTop10Keywords(cleaned, visualContext, maxCount);
+  
+  // Step 9: Limit to max count
+  return cleaned.slice(0, maxCount);
 }
 
 /**
